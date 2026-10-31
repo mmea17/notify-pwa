@@ -1,4 +1,4 @@
-import webpush from 'web-push';
+import { buildPushPayload } from '@block65/webcrypto-web-push';
 import type { Env } from './db';
 
 export interface PushNotificationPayload {
@@ -15,8 +15,11 @@ export interface PushNotificationPayload {
   }>;
 }
 
+export const DEFAULT_VAPID_PUBLIC_KEY = 'BDIEGQcyoS50W-USqIC4ej3Id2a7DxL76DDo8TZfuUKuj2qWJvOFXk4JdEvAuKAF-H3KS6OAOzLNFssfDvqmy5A';
+export const DEFAULT_VAPID_PRIVATE_KEY = '_B-zrIcqT8TnDYhVIOYioOV8ofLrOw2938-7v2y4xvk';
+
 export async function getOrCreateVapidKeys(db: D1Database, env: Env): Promise<{ publicKey: string; privateKey: string; subject: string }> {
-  const subject = env.VAPID_SUBJECT || 'mailto:admin@notifypwa.local';
+  const subject = env.VAPID_SUBJECT || 'mailto:admin@notify-pwa-85k.pages.dev';
   
   if (env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY) {
     return {
@@ -27,27 +30,24 @@ export async function getOrCreateVapidKeys(db: D1Database, env: Env): Promise<{ 
   }
 
   // Check in database app_config
-  const pubRow = await db.prepare('SELECT value FROM app_config WHERE key = ?').bind('vapid_public_key').first();
-  const privRow = await db.prepare('SELECT value FROM app_config WHERE key = ?').bind('vapid_private_key').first();
+  try {
+    const pubRow = await db.prepare('SELECT value FROM app_config WHERE key = ?').bind('vapid_public_key').first();
+    const privRow = await db.prepare('SELECT value FROM app_config WHERE key = ?').bind('vapid_private_key').first();
 
-  if (pubRow && privRow) {
-    return {
-      publicKey: pubRow.value as string,
-      privateKey: privRow.value as string,
-      subject
-    };
+    if (pubRow?.value && privRow?.value) {
+      return {
+        publicKey: pubRow.value as string,
+        privateKey: privRow.value as string,
+        subject
+      };
+    }
+  } catch (e) {
+    console.warn('Could not read vapid keys from db:', e);
   }
 
-  // Generate new pair
-  const keys = webpush.generateVAPIDKeys();
-  await db.batch([
-    db.prepare('INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?)').bind('vapid_public_key', keys.publicKey),
-    db.prepare('INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?)').bind('vapid_private_key', keys.privateKey)
-  ]);
-
   return {
-    publicKey: keys.publicKey,
-    privateKey: keys.privateKey,
+    publicKey: DEFAULT_VAPID_PUBLIC_KEY,
+    privateKey: DEFAULT_VAPID_PRIVATE_KEY,
     subject
   };
 }
@@ -57,32 +57,34 @@ export async function sendPushToSubscription(
   payload: PushNotificationPayload,
   vapid: { publicKey: string; privateKey: string; subject: string }
 ): Promise<boolean> {
-  webpush.setVapidDetails(vapid.subject, vapid.publicKey, vapid.privateKey);
-
-  const pushSubscription = {
-    endpoint: subscription.endpoint,
-    keys: {
-      p256dh: subscription.p256dh,
-      auth: subscription.auth
-    }
-  };
-
   try {
-    await webpush.sendNotification(
-      pushSubscription,
-      JSON.stringify(payload),
-      {
-        TTL: 60 * 60, // 1 hour time-to-live
-        urgency: 'high'
+    const sub = {
+      endpoint: subscription.endpoint,
+      keys: {
+        p256dh: subscription.p256dh,
+        auth: subscription.auth
       }
-    );
-    return true;
-  } catch (error: any) {
-    console.error('Failed to send push notification:', error?.statusCode || error?.message || error);
-    // If subscription is expired or invalid (404 / 410 Gone)
-    if (error?.statusCode === 404 || error?.statusCode === 410) {
-      return false; // Caller can remove this subscription
+    };
+
+    const pushPayload = await buildPushPayload({ data: payload }, sub, vapid);
+    const res = await fetch(subscription.endpoint, {
+      method: pushPayload.method,
+      headers: pushPayload.headers,
+      body: pushPayload.body
+    });
+
+    if (res.ok || res.status === 201 || res.status === 202) {
+      return true;
     }
+
+    if (res.status === 404 || res.status === 410) {
+      return false; // Subscription expired
+    }
+
+    console.warn('Push response status:', res.status, await res.text());
+    return false;
+  } catch (error: any) {
+    console.error('Failed to send push notification:', error?.message || error);
     return false;
   }
 }

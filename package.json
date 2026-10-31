@@ -12,6 +12,7 @@
   "dependencies": {
     "@astrojs/cloudflare": "^12.2.0",
     "@astrojs/react": "^4.2.0",
+    "@block65/webcrypto-web-push": "^2.0.0",
     "adhan": "^4.4.6",
     "astro": "^5.4.0",
     "lucide-react": "^1.16.0",

@@ -51,14 +51,19 @@ export async function subscribeUserToPush(deviceName?: string): Promise<{ succes
     // 1. Request Notification Permission
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
-      return { success: false, error: 'تم رفض إذن الإشعارات من إعدادات المتصفح. يرجى السماح بالإشعارات من قفل العنوان 🔒.' };
+      return { success: false, error: 'تم رفض إذن الإشعارات من إعدادات المتصفح. يرجى السماح بالإشعارات من قفل شريط العنوان 🔒.' };
     }
 
     // 2. Fetch VAPID Public Key from server
     const vapidRes = await fetch('/api/push/vapid-public-key');
+    if (!vapidRes.ok) {
+      const errText = await vapidRes.text().catch(() => '');
+      throw new Error(`خطأ في استرجاع مفتاح الإشعارات: ${errText || vapidRes.statusText}`);
+    }
+
     const vapidData = await vapidRes.json();
     if (!vapidData.publicKey) {
-      throw new Error('لم نتمكن من الحصول على مفتاح الإشعارات من الخادم');
+      throw new Error(vapidData.error || 'لم نتمكن من الحصول على مفتاح الإشعارات من الخادم');
     }
 
     // 3. Register push with browser pushManager
@@ -92,12 +97,13 @@ export async function subscribeUserToPush(deviceName?: string): Promise<{ succes
       })
     });
 
-    const result = await res.json();
     if (!res.ok) {
-      throw new Error(result.error || 'فشل حفظ الاشتراك في الخادم');
+      const errText = await res.text().catch(() => '');
+      throw new Error(`فشل حفظ الاشتراك في الخادم: ${errText || res.statusText}`);
     }
 
-    return { success: true, message: 'تم تفعيل الإشعارات بنجاح على هذا الجهاز!' };
+    const result = await res.json();
+    return { success: true, message: result.message || 'تم تفعيل الإشعارات بنجاح على هذا الجهاز!' };
   } catch (error: any) {
     console.error('Push subscription failed:', error);
     return { success: false, error: error?.message || 'حدث خطأ أثناء تفعيل الإشعارات' };
