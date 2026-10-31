@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { Header } from './Header';
+import React, { useState, useEffect } from 'react';
+import { Header, type ActiveTab } from './Header';
 import { PushBanner } from './PushBanner';
 import { PrayerTracker } from './PrayerTracker';
-import { TimeWindowsManager } from './TimeWindowsManager';
-import { NotificationTester } from './NotificationTester';
+import { TrackingView } from './TrackingView';
+import { AthkarView } from './AthkarView';
 import { SettingsModal } from './SettingsModal';
 
 interface DashboardAppProps {
@@ -16,6 +16,27 @@ export const DashboardApp: React.FC<DashboardAppProps> = ({ user, settings: init
   const [settings, setSettings] = useState(initSettings);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Tab management (home | tracking | athkar) with URL hash synchronization
+  const [activeTab, setActiveTab] = useState<ActiveTab>('home');
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#', '');
+      if (hash === 'tracking' || hash === 'athkar' || hash === 'home') {
+        setActiveTab(hash as ActiveTab);
+      }
+    };
+
+    handleHashChange();
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  const handleTabChange = (tab: ActiveTab) => {
+    setActiveTab(tab);
+    window.location.hash = tab === 'home' ? '' : tab;
+  };
 
   const handleSettingsSaved = async () => {
     try {
@@ -53,12 +74,14 @@ export const DashboardApp: React.FC<DashboardAppProps> = ({ user, settings: init
       <Header
         user={user}
         settings={settings}
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onTriggerTest={handleTriggerQuickTest}
       />
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        {/* Quick Welcome & Goal Banner */}
+        {/* Quick Welcome Banner */}
         <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
@@ -70,21 +93,31 @@ export const DashboardApp: React.FC<DashboardAppProps> = ({ user, settings: init
           </div>
         </div>
 
-        {/* 1. Push Subscription Banner (if not subscribed on this device) */}
+        {/* 1. Push Subscription Banner (shows on all pages if not yet subscribed on this device) */}
         <PushBanner onSubscribed={() => setRefreshKey(k => k + 1)} />
 
-        {/* 2. Today's Prayers Tracker */}
-        <PrayerTracker key={`prayers-${refreshKey}`} initialPrayers={initialPrayers} />
+        {/* 2. Dynamic Tab Views */}
+        {activeTab === 'home' && (
+          <div className="animate-fade-in">
+            <PrayerTracker key={`prayers-${refreshKey}`} initialPrayers={initialPrayers} />
+          </div>
+        )}
 
-        {/* 3. Time Windows & Messages Pool */}
-        <TimeWindowsManager key={`windows-${refreshKey}`} />
+        {activeTab === 'tracking' && (
+          <div className="animate-fade-in">
+            <TrackingView key={`tracking-${refreshKey}`} />
+          </div>
+        )}
 
-        {/* 4. Notification Testing Lab */}
-        <NotificationTester />
+        {activeTab === 'athkar' && (
+          <div className="animate-fade-in">
+            <AthkarView key={`athkar-${refreshKey}`} refreshKey={refreshKey} />
+          </div>
+        )}
       </main>
 
       <footer className="border-t border-slate-900 py-6 text-center text-xs text-slate-500">
-        تطبيق تذكير PWA • مدعوم بـ Cloudflare Workers & Astro • مصمم لمحاربة التشتت ومتابعة الصلوات
+        تطبيق تذكير PWA • مدعوم بـ Cloudflare Workers & Astro • مصمم لمتابعة الصلوات والأذكار ومحاربة التشتت
       </footer>
 
       {/* Settings Modal */}

@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
   post_prayer_mins INTEGER DEFAULT 15,
   snooze_interval_mins INTEGER DEFAULT 15,
   sound_enabled INTEGER DEFAULT 1,
+  max_streak INTEGER DEFAULT 0,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -1,15 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, BellOff, Settings, LogOut, Send, Sparkles, Smartphone, CheckCircle } from 'lucide-react';
+import {
+  Bell,
+  Settings,
+  LogOut,
+  Send,
+  Smartphone,
+  CheckCircle,
+  Home,
+  Flame,
+  Sparkles
+} from 'lucide-react';
 import { getSubscriptionStatus, subscribeUserToPush } from '@/lib/push-client';
+
+export type ActiveTab = 'home' | 'tracking' | 'athkar';
 
 interface HeaderProps {
   user: { id: string; name: string; email: string };
   settings: any;
+  activeTab: ActiveTab;
+  onTabChange: (tab: ActiveTab) => void;
   onOpenSettings: () => void;
   onTriggerTest: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ user, settings, onOpenSettings, onTriggerTest }) => {
+export const Header: React.FC<HeaderProps> = ({
+  user,
+  settings,
+  activeTab,
+  onTabChange,
+  onOpenSettings,
+  onTriggerTest
+}) => {
   const [pushStatus, setPushStatus] = useState<'checking' | 'active' | 'inactive' | 'unsupported'>('checking');
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -49,8 +70,15 @@ export const Header: React.FC<HeaderProps> = ({ user, settings, onOpenSettings, 
     }
   };
 
+  const NAV_ITEMS: Array<{ id: ActiveTab; label: string; icon: any; badge?: string }> = [
+    { id: 'home', label: 'الرئيسية', icon: Home },
+    { id: 'tracking', label: 'المتابعة والتقويم', icon: Flame, badge: 'سلاسل' },
+    { id: 'athkar', label: 'الأذكار والتركيز', icon: Sparkles }
+  ];
+
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md">
+    <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-md">
+      {/* Top Bar: Brand & Profile Controls */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
         {/* Brand */}
         <div className="flex items-center gap-3">
@@ -66,7 +94,7 @@ export const Header: React.FC<HeaderProps> = ({ user, settings, onOpenSettings, 
                 PWA
               </span>
             </div>
-            <p className="text-xs text-slate-400 hidden sm:block">إشعارات ذكية تفاعلية لمحاربة التشتت</p>
+            <p className="text-xs text-slate-400 hidden sm:block">إشعارات تفاعلية لمتابعة الصلوات ومحاربة التشتت</p>
           </div>
         </div>
 
@@ -125,6 +153,37 @@ export const Header: React.FC<HeaderProps> = ({ user, settings, onOpenSettings, 
               <LogOut className="w-4 h-4" />
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Navigation Tabs Bar (3 Main Pages) */}
+      <div className="border-t border-slate-800/60 bg-slate-950/60">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-start sm:justify-center gap-2 sm:gap-4 py-2 overflow-x-auto no-scrollbar">
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => onTabChange(item.id)}
+                className={`flex items-center gap-2 px-3.5 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap active:scale-95 ${
+                  isActive
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm shadow-emerald-500/10'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                }`}
+              >
+                <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
+                <span>{item.label}</span>
+                {item.badge && (
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                    isActive ? 'bg-emerald-500/30 text-emerald-200' : 'bg-slate-800 text-slate-400'
+                  }`}>
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
