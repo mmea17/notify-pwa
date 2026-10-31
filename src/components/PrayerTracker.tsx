@@ -135,88 +135,89 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
   return (
     <div className="bg-slate-900/50 border border-slate-800/80 rounded-2xl p-5 sm:p-6 mb-8 backdrop-blur-sm">
       {/* Header Info */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 mb-6 pb-5 border-b border-slate-800">
-        {/* Right side: Title & Next Prayer (Shifted right as requested) */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 flex-wrap">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
-                <span>{isToday ? 'صلوات اليوم' : 'مواقيت الصلاة'}</span>
-                <span className="text-emerald-400">🕌</span>
-              </h2>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300">
-                {city}، {country}
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-1">
-              حساب فلكي دقيق بالتوقيت المحلي لمدينتك • انقر على أي صلاة لتأكيد أدائها بشكل مستقل
-            </p>
-          </div>
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6 pb-5 border-b border-slate-800">
+        {/* Right side: Title & City */}
+        <div className="flex items-center gap-2.5">
+          <h2 className="text-xl sm:text-2xl font-extrabold text-white flex items-center gap-2">
+            <span>{isToday ? 'صلوات اليوم' : 'مواقيت الصلاة'}</span>
+            <span className="text-emerald-400">🕌</span>
+          </h2>
+          <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 font-medium">
+            {city}، {country}
+          </span>
+        </div>
 
-          {/* Next Prayer Countdown Card (Shifted to the right) */}
+        {/* Left side: Stacked Countdown Card + Date Navigator with identical fixed width */}
+        <div className="flex flex-col gap-2 w-full sm:w-[390px] shrink-0">
+          {/* Top: Next Prayer Countdown Card */}
           {next && (
-            <div className="flex items-center gap-3 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-950/70 to-slate-900 border border-emerald-500/30 shrink-0">
-              <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
-                <Clock className="w-4 h-4 animate-spin-slow" />
-              </div>
-              <div>
-                <div className="text-[11px] text-emerald-400 font-semibold">
-                  الصلاة القادمة {isToday ? '' : '(اليوم)'}: {next.nameAr}
+            <div className="w-full flex items-center justify-between gap-3 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-emerald-950/70 to-slate-900 border border-emerald-500/30 shadow-inner">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                  <Clock className="w-4 h-4 animate-spin-slow" />
                 </div>
-                <div className="text-xs sm:text-sm text-slate-200 font-bold">
-                  {next.timeFormatted} ({next.remainingFormatted || (next.diffMinutes > 0 ? `باقي ${next.diffMinutes} دقيقة` : 'حان وقتها الآن')})
+                <div className="min-w-0">
+                  <div className="text-[11px] text-emerald-400 font-semibold truncate">
+                    الصلاة القادمة {isToday ? '' : '(اليوم)'}: {next.nameAr}
+                  </div>
+                  <div className="text-xs sm:text-sm text-slate-200 font-bold truncate">
+                    {next.timeFormatted} ({next.remainingFormatted || (next.diffMinutes > 0 ? `باقي ${next.diffMinutes} دقيقة` : 'حان وقتها الآن')})
+                  </div>
                 </div>
               </div>
             </div>
           )}
-        </div>
 
-        {/* Left side: Day Navigation Buttons & Gregorian / Hijri Dates */}
-        <div className="flex items-center justify-between sm:justify-end gap-2 bg-slate-950/70 border border-slate-800/90 p-1.5 rounded-2xl shrink-0 shadow-inner">
-          {/* Previous Day Button */}
-          <button
-            type="button"
-            onClick={() => changeDateByDays(-1)}
-            title="اليوم السابق"
-            className="p-2 sm:px-2.5 rounded-xl bg-slate-800/80 hover:bg-emerald-500/20 hover:text-emerald-300 text-slate-300 transition-all border border-slate-700/60 flex items-center gap-1 active:scale-95"
-          >
-            <ChevronRight className="w-4 h-4" />
-            <span className="text-xs hidden sm:inline font-medium">السابق</span>
-          </button>
+          {/* Bottom: Day Navigation Buttons & Gregorian / Hijri Dates */}
+          <div className="w-full flex items-center justify-between gap-1.5 bg-slate-950/70 border border-slate-800/90 p-1.5 rounded-2xl shadow-inner">
+            {/* Previous Day Button */}
+            <button
+              type="button"
+              onClick={() => changeDateByDays(-1)}
+              title="اليوم السابق"
+              className="p-1.5 sm:px-2.5 rounded-xl bg-slate-800/80 hover:bg-emerald-500/20 hover:text-emerald-300 text-slate-300 transition-all border border-slate-700/60 flex items-center gap-1 active:scale-95 shrink-0"
+            >
+              <ChevronRight className="w-4 h-4" />
+              <span className="text-xs hidden sm:inline font-medium">السابق</span>
+            </button>
 
-          {/* Date Info Display (Gregorian & Hijri) */}
-          <div className="text-center px-3 py-0.5 min-w-[160px] sm:min-w-[190px]">
-            <div className="flex items-center justify-center gap-1.5 text-xs sm:text-sm font-bold text-white">
-              <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>{gregorianFormatted || selectedDateStr}</span>
+            {/* Date Info Display (Gregorian & Hijri) */}
+            <div className="text-center px-2 flex-1 min-w-0">
+              <div className="flex items-center justify-center gap-1.5 text-xs sm:text-sm font-bold text-white truncate">
+                <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span className="truncate">{gregorianFormatted || selectedDateStr}</span>
+              </div>
+              <div className="text-[11px] text-emerald-400/90 font-medium mt-0.5 truncate">
+                {hijriFormatted}
+              </div>
             </div>
-            <div className="text-[11px] text-emerald-400/90 font-medium mt-0.5">
-              {hijriFormatted}
-            </div>
-          </div>
 
-          {/* Next Day Button */}
-          <button
-            type="button"
-            onClick={() => changeDateByDays(1)}
-            title="اليوم التالي"
-            className="p-2 sm:px-2.5 rounded-xl bg-slate-800/80 hover:bg-emerald-500/20 hover:text-emerald-300 text-slate-300 transition-all border border-slate-700/60 flex items-center gap-1 active:scale-95"
-          >
-            <span className="text-xs hidden sm:inline font-medium">التالي</span>
-            <ChevronLeft className="w-4 h-4" />
-          </button>
+            {/* Next Day Button */}
+            <button
+              type="button"
+              onClick={() => changeDateByDays(1)}
+              title="اليوم التالي"
+              className="p-1.5 sm:px-2.5 rounded-xl bg-slate-800/80 hover:bg-emerald-500/20 hover:text-emerald-300 text-slate-300 transition-all border border-slate-700/60 flex items-center gap-1 active:scale-95 shrink-0"
+            >
+              <span className="text-xs hidden sm:inline font-medium">التالي</span>
+              <ChevronLeft className="w-4 h-4" />
+            </button>
 
-          {/* Quick Return to Today if navigated to another day */}
-          {!isToday && (
+            {/* Today Button: Reserved space when isToday so layout NEVER jumps or shifts */}
             <button
               type="button"
               onClick={goToToday}
-              className="text-[11px] font-bold px-2.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-all active:scale-95 whitespace-nowrap shadow-sm shadow-emerald-500/20"
+              disabled={isToday}
+              className={`text-[11px] font-bold px-2 py-1 rounded-xl border transition-all whitespace-nowrap shrink-0 ${
+                isToday
+                  ? 'opacity-0 pointer-events-none w-0 sm:w-auto overflow-hidden'
+                  : 'opacity-100 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/40 active:scale-95 shadow-sm shadow-emerald-500/20'
+              }`}
               title="الرجوع إلى تاريخ اليوم"
             >
               اليوم
             </button>
-          )}
+          </div>
         </div>
       </div>
 
