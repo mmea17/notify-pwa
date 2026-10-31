@@ -12,25 +12,54 @@ export const GET: APIRoute = async (context) => {
       return new Response(JSON.stringify({ error: 'غير مصرح' }), { status: 401 });
     }
 
-    const todayDate = new Date();
+    const now = new Date();
     const userTimezone = getCountryTimezone(session.settings.country);
-    const todayStr = getLocalDateString(todayDate, userTimezone);
+    const todayStr = getLocalDateString(now, userTimezone);
 
+    // Support ?date=YYYY-MM-DD
+    const url = new URL(context.request.url);
+    const queryDate = url.searchParams.get('date');
+
+    let targetDateStr = todayStr;
+    let targetDate = now;
+
+    if (queryDate && /^\d{4}-\d{2}-\d{2}$/.test(queryDate)) {
+      targetDateStr = queryDate;
+      const [y, m, d] = queryDate.split('-').map(Number);
+      targetDate = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+    }
+
+    // Prayers for selected date
     const prayers = calculateDailyPrayers(
       session.settings.latitude,
       session.settings.longitude,
       session.settings.calculation_method,
       session.settings.madhab,
-      todayDate,
+      targetDate,
       session.settings.pre_prayer_mins,
       session.settings.post_prayer_mins,
       userTimezone
     );
 
-    // Retrieve today's status from D1 for this user only
+    // If viewing a different day, always keep nextPrayer synced with today's real upcoming prayer
+    if (targetDateStr !== todayStr) {
+      const todayPrayers = calculateDailyPrayers(
+        session.settings.latitude,
+        session.settings.longitude,
+        session.settings.calculation_method,
+        session.settings.madhab,
+        now,
+        session.settings.pre_prayer_mins,
+        session.settings.post_prayer_mins,
+        userTimezone
+      );
+      prayers.nextPrayer = todayPrayers.nextPrayer;
+    }
+
+    // Retrieve selected date's status from D1 for this user
     const logs = await db.prepare(
       'SELECT prayer, status, responded_at, next_reminder_at FROM prayers_log WHERE user_id = ? AND date = ?'
-    ).bind(session.user.id, todayStr).all();
+    ).bind(session.user.id, targetDateStr).all();
 
     const logMap = new Map();
     if (logs.results) {
@@ -51,6 +80,10 @@ export const GET: APIRoute = async (context) => {
 
     return new Response(JSON.stringify({
       todayStr,
+      selectedDateStr: targetDateStr,
+      isToday: targetDateStr === todayStr,
+      gregorianFormatted: prayers.gregorianFormatted,
+      hijriFormatted: prayers.hijriFormatted,
       city: session.settings.city,
       country: session.settings.country,
       timezone: userTimezone,
@@ -77,7 +110,7 @@ export const POST: APIRoute = async (context) => {
     }
 
     const body = await context.request.json();
-    const { prayer, status } = body; // status: 'prayed' | 'pending'
+    const { prayer, status, date: bodyDate } = body; // status: 'prayed' | 'pending'
 
     if (!prayer) {
       return new Response(JSON.stringify({ error: 'حدد الصلاة' }), { status: 400 });
@@ -85,9 +118,10 @@ export const POST: APIRoute = async (context) => {
 
     const userTimezone = getCountryTimezone(session.settings.country);
     const todayStr = getLocalDateString(new Date(), userTimezone);
-    const logId = `prayer-${session.user.id}-${todayStr}-${prayer}`;
+    const targetDateStr = (bodyDate && /^\d{4}-\d{2}-\d{2}$/.test(bodyDate)) ? bodyDate : todayStr;
+    const logId = `prayer-${session.user.id}-${targetDateStr}-${prayer}`;
 
-    // Only update this specific prayer
+    // Only update this specific prayer on the selected date
     await db.prepare(`
       INSERT INTO prayers_log (id, user_id, date, prayer, status, scheduled_time, responded_at, next_reminder_at)
       VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL)
@@ -95,9 +129,9 @@ export const POST: APIRoute = async (context) => {
         status = excluded.status,
         responded_at = CURRENT_TIMESTAMP,
         next_reminder_at = NULL
-    `).bind(logId, session.user.id, todayStr, prayer, status || 'prayed').run();
+    `).bind(logId, session.user.id, targetDateStr, prayer, status || 'prayed').run();
 
-    return new Response(JSON.stringify({ success: true, prayer, status: status || 'prayed' }), {
+    return new Response(JSON.stringify({ success: true, date: targetDateStr, prayer, status: status || 'prayed' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });

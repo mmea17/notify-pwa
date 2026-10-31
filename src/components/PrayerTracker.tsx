@@ -1,5 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, CheckCircle2, RotateCcw, Moon, Sun, Sunrise, Sunset } from 'lucide-react';
+import {
+  Clock,
+  CheckCircle2,
+  Moon,
+  Sun,
+  Sunrise,
+  Sunset,
+  ChevronRight,
+  ChevronLeft,
+  Calendar
+} from 'lucide-react';
 
 interface PrayerTrackerProps {
   initialPrayers?: any;
@@ -8,33 +18,63 @@ interface PrayerTrackerProps {
 export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) => {
   const [data, setData] = useState<any>(initialPrayers || null);
   const [loading, setLoading] = useState(!initialPrayers);
+  const [dateLoading, setDateLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>(
+    initialPrayers?.selectedDateStr || initialPrayers?.todayStr || ''
+  );
 
-  const fetchPrayers = async () => {
+  const fetchPrayers = async (dateStr?: string) => {
+    const target = dateStr !== undefined ? dateStr : selectedDate;
     try {
-      const res = await fetch('/api/prayers/today');
+      if (dateStr) setDateLoading(true);
+      const url = target ? `/api/prayers/today?date=${target}` : '/api/prayers/today';
+      const res = await fetch(url);
       if (res.ok) {
         const json = await res.json();
         setData(json);
+        if (!selectedDate && json.selectedDateStr) {
+          setSelectedDate(json.selectedDateStr);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch prayers:', err);
     } finally {
       setLoading(false);
+      setDateLoading(false);
     }
   };
 
   useEffect(() => {
     fetchPrayers();
-    const interval = setInterval(fetchPrayers, 60000); // refresh every minute
+    const interval = setInterval(() => {
+      fetchPrayers(selectedDate);
+    }, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedDate]);
 
-  // Toggle ONLY the clicked prayer
+  const changeDateByDays = (delta: number) => {
+    const baseStr = selectedDate || data?.todayStr || new Date().toISOString().split('T')[0];
+    const [y, m, d] = baseStr.split('-').map(Number);
+    const dateObj = new Date(Date.UTC(y, m - 1, d + delta, 12, 0, 0));
+    const nextStr = dateObj.toISOString().split('T')[0];
+    setSelectedDate(nextStr);
+    fetchPrayers(nextStr);
+  };
+
+  const goToToday = () => {
+    if (data?.todayStr) {
+      setSelectedDate(data.todayStr);
+      fetchPrayers(data.todayStr);
+    }
+  };
+
+  // Toggle clicked prayer for the currently viewed date
   const handleTogglePrayer = async (prayerKey: string, currentStatus: string) => {
     const newStatus = currentStatus === 'prayed' ? 'pending' : 'prayed';
-    
-    // 1. Optimistic update: Update ONLY this single prayer in local state immediately
+    const targetDate = data?.selectedDateStr || selectedDate || data?.todayStr;
+
+    // 1. Optimistic update
     setData((prev: any) => {
       if (!prev || !prev.prayers) return prev;
       return {
@@ -54,15 +94,18 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
       const res = await fetch('/api/prayers/today', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prayer: prayerKey, status: newStatus })
+        body: JSON.stringify({
+          prayer: prayerKey,
+          status: newStatus,
+          date: targetDate
+        })
       });
       if (!res.ok) {
-        // Rollback on failure
-        fetchPrayers();
+        fetchPrayers(targetDate);
       }
     } catch (e) {
       console.error(e);
-      fetchPrayers();
+      fetchPrayers(targetDate);
     } finally {
       setActionLoading(null);
     }
@@ -76,7 +119,8 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
     );
   }
 
-  const { prayers, city, country } = data;
+  const { prayers, city, country, todayStr, selectedDateStr, gregorianFormatted, hijriFormatted } = data;
+  const isToday = !selectedDateStr || selectedDateStr === todayStr;
   const next = prayers.nextPrayer;
 
   const prayerItems = [
@@ -91,46 +135,99 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
   return (
     <div className="bg-slate-900/50 border border-slate-800/80 rounded-2xl p-5 sm:p-6 mb-8 backdrop-blur-sm">
       {/* Header Info */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 pb-5 border-b border-slate-800">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
-              <span>صلوات اليوم</span>
-              <span className="text-emerald-400">🕌</span>
-            </h2>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300">
-              {city}، {country}
-            </span>
-          </div>
-          <p className="text-xs text-slate-400 mt-1">
-            حساب فلكي دقيق بالتوقيت المحلي لمدينتك • انقر على أي صلاة لتأكيد أدائها بشكل مستقل
-          </p>
-        </div>
-
-        {/* Next Prayer Countdown Card */}
-        {next && (
-          <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-950/70 to-slate-900 border border-emerald-500/30">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400">
-              <Clock className="w-4 h-4 animate-spin-slow" />
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 mb-6 pb-5 border-b border-slate-800">
+        {/* Right side: Title & Next Prayer (Shifted right as requested) */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 flex-wrap">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
+                <span>{isToday ? 'صلوات اليوم' : 'مواقيت الصلاة'}</span>
+                <span className="text-emerald-400">🕌</span>
+              </h2>
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300">
+                {city}، {country}
+              </span>
             </div>
-            <div>
-              <div className="text-[11px] text-emerald-400 font-semibold">الصلاة القادمة: {next.nameAr}</div>
-              <div className="text-xs sm:text-sm text-slate-200 font-bold">
-                {next.timeFormatted} ({next.remainingFormatted || (next.diffMinutes > 0 ? `باقي ${next.diffMinutes} دقيقة` : 'حان وقتها الآن')})
+            <p className="text-xs text-slate-400 mt-1">
+              حساب فلكي دقيق بالتوقيت المحلي لمدينتك • انقر على أي صلاة لتأكيد أدائها بشكل مستقل
+            </p>
+          </div>
+
+          {/* Next Prayer Countdown Card (Shifted to the right) */}
+          {next && (
+            <div className="flex items-center gap-3 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-950/70 to-slate-900 border border-emerald-500/30 shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                <Clock className="w-4 h-4 animate-spin-slow" />
+              </div>
+              <div>
+                <div className="text-[11px] text-emerald-400 font-semibold">
+                  الصلاة القادمة {isToday ? '' : '(اليوم)'}: {next.nameAr}
+                </div>
+                <div className="text-xs sm:text-sm text-slate-200 font-bold">
+                  {next.timeFormatted} ({next.remainingFormatted || (next.diffMinutes > 0 ? `باقي ${next.diffMinutes} دقيقة` : 'حان وقتها الآن')})
+                </div>
               </div>
             </div>
+          )}
+        </div>
+
+        {/* Left side: Day Navigation Buttons & Gregorian / Hijri Dates */}
+        <div className="flex items-center justify-between sm:justify-end gap-2 bg-slate-950/70 border border-slate-800/90 p-1.5 rounded-2xl shrink-0 shadow-inner">
+          {/* Previous Day Button */}
+          <button
+            type="button"
+            onClick={() => changeDateByDays(-1)}
+            title="اليوم السابق"
+            className="p-2 sm:px-2.5 rounded-xl bg-slate-800/80 hover:bg-emerald-500/20 hover:text-emerald-300 text-slate-300 transition-all border border-slate-700/60 flex items-center gap-1 active:scale-95"
+          >
+            <ChevronRight className="w-4 h-4" />
+            <span className="text-xs hidden sm:inline font-medium">السابق</span>
+          </button>
+
+          {/* Date Info Display (Gregorian & Hijri) */}
+          <div className="text-center px-3 py-0.5 min-w-[160px] sm:min-w-[190px]">
+            <div className="flex items-center justify-center gap-1.5 text-xs sm:text-sm font-bold text-white">
+              <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>{gregorianFormatted || selectedDateStr}</span>
+            </div>
+            <div className="text-[11px] text-emerald-400/90 font-medium mt-0.5">
+              {hijriFormatted}
+            </div>
           </div>
-        )}
+
+          {/* Next Day Button */}
+          <button
+            type="button"
+            onClick={() => changeDateByDays(1)}
+            title="اليوم التالي"
+            className="p-2 sm:px-2.5 rounded-xl bg-slate-800/80 hover:bg-emerald-500/20 hover:text-emerald-300 text-slate-300 transition-all border border-slate-700/60 flex items-center gap-1 active:scale-95"
+          >
+            <span className="text-xs hidden sm:inline font-medium">التالي</span>
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+
+          {/* Quick Return to Today if navigated to another day */}
+          {!isToday && (
+            <button
+              type="button"
+              onClick={goToToday}
+              className="text-[11px] font-bold px-2.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-all active:scale-95 whitespace-nowrap shadow-sm shadow-emerald-500/20"
+              title="الرجوع إلى تاريخ اليوم"
+            >
+              اليوم
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Prayers Cards Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+      <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 transition-opacity duration-200 ${dateLoading ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
         {prayerItems.map((item) => {
           const Icon = item.icon;
           const isSunrise = item.isSunrise;
           const isPrayed = item.info?.status === 'prayed';
           const isSnoozed = item.info?.status === 'snoozed';
-          const isNext = next && next.key === item.key;
+          const isNext = isToday && next && next.key === item.key;
 
           return (
             <div

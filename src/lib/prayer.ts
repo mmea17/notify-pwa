@@ -13,6 +13,8 @@ export interface PrayerInfo {
 
 export interface DayPrayers {
   dateStr: string;
+  gregorianFormatted: string;
+  hijriFormatted: string;
   fajr: PrayerInfo;
   sunrise: { timeFormatted: string; timestamp: number };
   dhuhr: PrayerInfo;
@@ -63,6 +65,28 @@ export function getCalculationParameters(methodName: string, madhabName: string)
   }
 
   return params;
+}
+
+export function formatDayDates(date: Date, timeZone: string = 'Africa/Cairo'): {
+  gregorian: string;
+  hijri: string;
+} {
+  const gregorian = new Intl.DateTimeFormat('ar-EG-u-nu-latn', {
+    timeZone: timeZone || 'Africa/Cairo',
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  }).format(date);
+
+  const hijri = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura-nu-latn', {
+    timeZone: timeZone || 'Africa/Cairo',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  }).format(date);
+
+  return { gregorian, hijri };
 }
 
 export function formatTimeArabic(date: Date, timeZone: string = 'Africa/Cairo'): string {
@@ -208,8 +232,12 @@ export function calculateDailyPrayers(
     }
   }
 
+  const { gregorian, hijri } = formatDayDates(date, timeZone);
+
   return {
     dateStr,
+    gregorianFormatted: gregorian,
+    hijriFormatted: hijri,
     fajr,
     sunrise: {
       timeFormatted: formatTimeArabic(prayerTimes.sunrise, timeZone),

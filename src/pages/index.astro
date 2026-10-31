@@ -52,6 +52,10 @@ try {
 
 const initialPrayersData = {
   todayStr,
+  selectedDateStr: todayStr,
+  isToday: true,
+  gregorianFormatted: calculatedPrayers.gregorianFormatted,
+  hijriFormatted: calculatedPrayers.hijriFormatted,
   city: session.settings.city,
   country: session.settings.country,
   timezone: userTimezone,
