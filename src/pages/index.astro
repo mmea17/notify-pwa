@@ -1,0 +1,40 @@
+---
+import Layout from '@/layouts/Layout.astro';
+import { DashboardApp } from '@/components/DashboardApp';
+import { getDB } from '@/lib/db';
+import { getCurrentSession } from '@/lib/auth';
+import { calculateDailyPrayers } from '@/lib/prayer';
+
+const db = getDB(Astro);
+const session = await getCurrentSession(Astro, db);
+
+if (!session) {
+  return Astro.redirect('/login');
+}
+
+const today = new Date();
+const initialPrayersData = {
+  todayStr: today.toISOString().split('T')[0],
+  city: session.settings.city,
+  country: session.settings.country,
+  method: session.settings.calculation_method,
+  prayers: calculateDailyPrayers(
+    session.settings.latitude,
+    session.settings.longitude,
+    session.settings.calculation_method,
+    session.settings.madhab,
+    today,
+    session.settings.pre_prayer_mins,
+    session.settings.post_prayer_mins
+  )
+};
+---
+
+<Layout title="تذكير | لوحة التحكم ومتابعة الصلوات">
+  <DashboardApp
+    client:load
+    user={session.user}
+    settings={session.settings}
+    initialPrayers={initialPrayersData}
+  />
+</Layout>

@@ -1,0 +1,19 @@
+---
+import Layout from '@/layouts/Layout.astro';
+import { LoginForm } from '@/components/LoginForm';
+import { getDB } from '@/lib/db';
+import { getCurrentSession } from '@/lib/auth';
+
+const db = getDB(Astro);
+const session = await getCurrentSession(Astro, db);
+
+if (session) {
+  return Astro.redirect('/');
+}
+---
+
+<Layout title="تسجيل الدخول | تذكير">
+  <div className="min-h-screen flex items-center justify-center p-4">
+    <LoginForm client:load />
+  </div>
+</Layout>

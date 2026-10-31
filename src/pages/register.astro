@@ -1,0 +1,19 @@
+---
+import Layout from '@/layouts/Layout.astro';
+import { RegisterForm } from '@/components/RegisterForm';
+import { getDB } from '@/lib/db';
+import { getCurrentSession } from '@/lib/auth';
+
+const db = getDB(Astro);
+const session = await getCurrentSession(Astro, db);
+
+if (session) {
+  return Astro.redirect('/');
+}
+---
+
+<Layout title="إنشاء حساب جديد | تذكير">
+  <div className="min-h-screen flex items-center justify-center p-4">
+    <RegisterForm client:load />
+  </div>
+</Layout>

@@ -1,0 +1,140 @@
+import React, { useState, useEffect } from 'react';
+import { Bell, BellOff, Settings, LogOut, Send, Sparkles, Smartphone, CheckCircle } from 'lucide-react';
+import { getSubscriptionStatus, subscribeUserToPush } from '@/lib/push-client';
+
+interface HeaderProps {
+  user: { id: string; name: string; email: string };
+  settings: any;
+  onOpenSettings: () => void;
+  onTriggerTest: () => void;
+}
+
+export const Header: React.FC<HeaderProps> = ({ user, settings, onOpenSettings, onTriggerTest }) => {
+  const [pushStatus, setPushStatus] = useState<'checking' | 'active' | 'inactive' | 'unsupported'>('checking');
+  const [isSubscribing, setIsSubscribing] = useState(false);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const checkStatus = async () => {
+    const status = await getSubscriptionStatus();
+    if (!status.supported) {
+      setPushStatus('unsupported');
+    } else if (status.subscribed) {
+      setPushStatus('active');
+    } else {
+      setPushStatus('inactive');
+    }
+  };
+
+  useEffect(() => {
+    checkStatus();
+  }, []);
+
+  const handleQuickEnable = async () => {
+    setIsSubscribing(true);
+    const res = await subscribeUserToPush();
+    setIsSubscribing(false);
+    if (res.success) {
+      setToastMsg('تم تفعيل الإشعارات بنجاح على هذا الجهاز! 🎉');
+      setPushStatus('active');
+      setTimeout(() => setToastMsg(null), 4000);
+    } else {
+      alert(res.error || 'فشل التفعيل');
+    }
+  };
+
+  const handleLogout = async () => {
+    if (confirm('هل ترغب بتسجيل الخروج؟')) {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      window.location.href = '/login';
+    }
+  };
+
+  return (
+    <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+        {/* Brand */}
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-white font-bold text-xl">
+            ت
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-emerald-400 to-teal-200 bg-clip-text text-transparent">
+                تَـذْكِـيـر
+              </span>
+              <span className="text-[10px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                PWA
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 hidden sm:block">إشعارات ذكية تفاعلية لمحاربة التشتت</p>
+          </div>
+        </div>
+
+        {/* User Info & Actions */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Device Push Status Pill */}
+          {pushStatus === 'active' ? (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-medium">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="hidden md:inline">الإشعارات مفعلة</span>
+              <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+          ) : pushStatus === 'inactive' ? (
+            <button
+              onClick={handleQuickEnable}
+              disabled={isSubscribing}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500/20 transition text-xs font-semibold"
+            >
+              <Bell className="w-3.5 h-3.5" />
+              <span>{isSubscribing ? 'جاري التفعيل...' : 'تفعيل الإشعارات هنا'}</span>
+            </button>
+          ) : null}
+
+          {/* Test Push Button */}
+          <button
+            onClick={onTriggerTest}
+            title="تجربة إشعار تفاعلي فوري"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium transition"
+          >
+            <Send className="w-3.5 h-3.5 text-teal-400" />
+            <span className="hidden sm:inline">تجربة إشعار</span>
+          </button>
+
+          {/* Settings Button */}
+          <button
+            onClick={onOpenSettings}
+            title="الإعدادات ومواقيت الصلاة"
+            className="p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-300 transition"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+
+          {/* User Name & Logout */}
+          <div className="flex items-center gap-2 border-r border-slate-800 pr-3 mr-1">
+            <span className="text-xs text-slate-300 font-medium hidden sm:inline">
+              {user.name}
+            </span>
+            <button
+              onClick={handleLogout}
+              title="تسجيل الخروج"
+              className="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Toast Alert */}
+      {toastMsg && (
+        <div className="bg-emerald-600 text-white text-xs font-medium py-2 px-4 text-center animate-fadeIn flex items-center justify-center gap-2">
+          <CheckCircle className="w-4 h-4" />
+          <span>{toastMsg}</span>
+        </div>
+      )}
+    </header>
+  );
+};
