@@ -25,8 +25,12 @@ export const GET: APIRoute = async (context) => {
 
     if (queryDate && /^\d{4}-\d{2}-\d{2}$/.test(queryDate)) {
       targetDateStr = queryDate;
-      const [y, m, d] = queryDate.split('-').map(Number);
-      targetDate = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+      if (queryDate === todayStr) {
+        targetDate = now;
+      } else {
+        const [y, m, d] = queryDate.split('-').map(Number);
+        targetDate = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+      }
     }
 
     // Prayers for selected date

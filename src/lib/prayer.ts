@@ -192,7 +192,9 @@ export function calculateDailyPrayers(
   const prayerTimes = new PrayerTimes(coordinates, localDate, params);
 
   const dateStr = getLocalDateString(date, timeZone);
-  const now = date.getTime();
+  const todayStr = getLocalDateString(new Date(), timeZone);
+  const realNow = Date.now();
+  const isTargetToday = dateStr === todayStr;
 
   const createPrayerInfo = (key: 'fajr' | 'dhuhr' | 'asr' | 'maghrib' | 'isha', nameAr: string, pDate: Date): PrayerInfo => {
     const preWarningDate = new Date(pDate.getTime() - preWarningMins * 60 * 1000);
@@ -218,17 +220,37 @@ export function calculateDailyPrayers(
   // Find next upcoming prayer
   const list = [fajr, dhuhr, asr, maghrib, isha];
   let nextPrayer: DayPrayers['nextPrayer'] = null;
-  for (const p of list) {
-    if (p.timestamp > now) {
-      const diffMinutes = Math.round((p.timestamp - now) / 60000);
+
+  if (isTargetToday) {
+    // For today, check against real-time current moment
+    for (const p of list) {
+      if (p.timestamp > realNow) {
+        const diffMinutes = Math.round((p.timestamp - realNow) / 60000);
+        nextPrayer = {
+          key: p.key,
+          nameAr: p.nameAr,
+          timeFormatted: p.timeFormatted,
+          diffMinutes,
+          remainingFormatted: formatDurationArabic(diffMinutes)
+        };
+        break;
+      }
+    }
+
+    // If all prayers of today have passed (e.g. late night after Isha), calculate tomorrow's Fajr
+    if (!nextPrayer) {
+      const tomorrowDate = new Date(realNow + 24 * 60 * 60 * 1000);
+      const tomorrowLocalDate = getLocalDateInTimezone(tomorrowDate, timeZone);
+      const tomorrowPt = new PrayerTimes(coordinates, tomorrowLocalDate, params);
+      const tomorrowFajr = tomorrowPt.fajr;
+      const diffMinutes = Math.round((tomorrowFajr.getTime() - realNow) / 60000);
       nextPrayer = {
-        key: p.key,
-        nameAr: p.nameAr,
-        timeFormatted: p.timeFormatted,
+        key: 'fajr',
+        nameAr: 'الفجر (غداً)',
+        timeFormatted: formatTimeArabic(tomorrowFajr, timeZone),
         diffMinutes,
         remainingFormatted: formatDurationArabic(diffMinutes)
       };
-      break;
     }
   }
 
