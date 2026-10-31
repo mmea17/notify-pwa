@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { getDB } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { calculateDailyPrayers } from '@/lib/prayer';
+import { getCountryTimezone } from '@/lib/countries';
 
 export const GET: APIRoute = async (context) => {
   try {
@@ -13,6 +14,7 @@ export const GET: APIRoute = async (context) => {
 
     const todayDate = new Date();
     const todayStr = todayDate.toISOString().split('T')[0];
+    const userTimezone = getCountryTimezone(session.settings.country);
 
     const prayers = calculateDailyPrayers(
       session.settings.latitude,
@@ -21,10 +23,11 @@ export const GET: APIRoute = async (context) => {
       session.settings.madhab,
       todayDate,
       session.settings.pre_prayer_mins,
-      session.settings.post_prayer_mins
+      session.settings.post_prayer_mins,
+      userTimezone
     );
 
-    // Retrieve today's status from D1
+    // Retrieve today's status from D1 for this user only
     const logs = await db.prepare(
       'SELECT prayer, status, responded_at, next_reminder_at FROM prayers_log WHERE user_id = ? AND date = ?'
     ).bind(session.user.id, todayStr).all();
@@ -41,6 +44,8 @@ export const GET: APIRoute = async (context) => {
       const logged = logMap.get(key);
       if (logged) {
         prayers[key].status = logged.status as any;
+      } else {
+        prayers[key].status = 'pending';
       }
     }
 
@@ -48,6 +53,7 @@ export const GET: APIRoute = async (context) => {
       todayStr,
       city: session.settings.city,
       country: session.settings.country,
+      timezone: userTimezone,
       method: session.settings.calculation_method,
       prayers
     }), {
@@ -80,6 +86,7 @@ export const POST: APIRoute = async (context) => {
     const todayStr = new Date().toISOString().split('T')[0];
     const logId = `prayer-${session.user.id}-${todayStr}-${prayer}`;
 
+    // Only update this specific prayer
     await db.prepare(`
       INSERT INTO prayers_log (id, user_id, date, prayer, status, scheduled_time, responded_at, next_reminder_at)
       VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL)
@@ -89,7 +96,7 @@ export const POST: APIRoute = async (context) => {
         next_reminder_at = NULL
     `).bind(logId, session.user.id, todayStr, prayer, status || 'prayed').run();
 
-    return new Response(JSON.stringify({ success: true, prayer, status }), {
+    return new Response(JSON.stringify({ success: true, prayer, status: status || 'prayed' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });

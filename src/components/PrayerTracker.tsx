@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, CheckCircle2, AlertCircle, Sparkles, Moon, Sun, Sunrise, Sunset } from 'lucide-react';
+import { Clock, CheckCircle2, RotateCcw, Moon, Sun, Sunrise, Sunset } from 'lucide-react';
 
 interface PrayerTrackerProps {
   initialPrayers?: any;
@@ -25,15 +25,30 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
   };
 
   useEffect(() => {
-    if (!initialPrayers) {
-      fetchPrayers();
-    }
+    fetchPrayers();
     const interval = setInterval(fetchPrayers, 60000); // refresh every minute
     return () => clearInterval(interval);
   }, []);
 
+  // Toggle ONLY the clicked prayer
   const handleTogglePrayer = async (prayerKey: string, currentStatus: string) => {
     const newStatus = currentStatus === 'prayed' ? 'pending' : 'prayed';
+    
+    // 1. Optimistic update: Update ONLY this single prayer in local state immediately
+    setData((prev: any) => {
+      if (!prev || !prev.prayers) return prev;
+      return {
+        ...prev,
+        prayers: {
+          ...prev.prayers,
+          [prayerKey]: {
+            ...prev.prayers[prayerKey],
+            status: newStatus
+          }
+        }
+      };
+    });
+
     setActionLoading(prayerKey);
     try {
       const res = await fetch('/api/prayers/today', {
@@ -41,11 +56,13 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prayer: prayerKey, status: newStatus })
       });
-      if (res.ok) {
-        await fetchPrayers();
+      if (!res.ok) {
+        // Rollback on failure
+        fetchPrayers();
       }
     } catch (e) {
       console.error(e);
+      fetchPrayers();
     } finally {
       setActionLoading(null);
     }
@@ -59,16 +76,16 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
     );
   }
 
-  const { prayers, city, country, todayStr } = data;
+  const { prayers, city, country } = data;
   const next = prayers.nextPrayer;
 
   const prayerItems = [
-    { key: 'fajr', label: 'صلاة الفجر', icon: Moon, info: prayers.fajr, color: 'from-indigo-600/20 to-sky-600/10' },
-    { key: 'sunrise', label: 'الشروق', icon: Sunrise, info: prayers.sunrise, isSunrise: true, color: 'from-amber-600/20 to-orange-600/10' },
-    { key: 'dhuhr', label: 'صلاة الظهر', icon: Sun, info: prayers.dhuhr, color: 'from-amber-500/20 to-yellow-500/10' },
-    { key: 'asr', label: 'صلاة العصر', icon: Sunset, info: prayers.asr, color: 'from-orange-500/20 to-amber-600/10' },
-    { key: 'maghrib', label: 'صلاة المغرب', icon: Sunset, info: prayers.maghrib, color: 'from-rose-500/20 to-purple-600/10' },
-    { key: 'isha', label: 'صلاة العشاء', icon: Moon, info: prayers.isha, color: 'from-purple-600/20 to-indigo-700/10' }
+    { key: 'fajr', label: 'صلاة الفجر', icon: Moon, info: prayers.fajr },
+    { key: 'sunrise', label: 'الشروق', icon: Sunrise, info: prayers.sunrise, isSunrise: true },
+    { key: 'dhuhr', label: 'صلاة الظهر', icon: Sun, info: prayers.dhuhr },
+    { key: 'asr', label: 'صلاة العصر', icon: Sunset, info: prayers.asr },
+    { key: 'maghrib', label: 'صلاة المغرب', icon: Sunset, info: prayers.maghrib },
+    { key: 'isha', label: 'صلاة العشاء', icon: Moon, info: prayers.isha }
   ];
 
   return (
@@ -86,20 +103,20 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            حساب فلكي دقيق - ينبهك النظام قبل الأذان للاستعداد ويتابع معك بعده بأزرار تفاعلية
+            حساب فلكي دقيق بالتوقيت المحلي لمدينتك • انقر على أي صلاة لتأكيد أدائها بشكل مستقل
           </p>
         </div>
 
         {/* Next Prayer Countdown Card */}
         {next && (
-          <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-950/70 to-slate-900 border border-emerald-500/30">
+          <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-950/70 to-slate-900 border border-emerald-500/30">
             <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400">
               <Clock className="w-4 h-4 animate-spin-slow" />
             </div>
             <div>
               <div className="text-[11px] text-emerald-400 font-semibold">الصلاة القادمة: {next.nameAr}</div>
-              <div className="text-xs text-slate-200 font-bold">
-                {next.timeFormatted} ({next.diffMinutes > 0 ? `باقي ${next.diffMinutes} دقيقة` : 'حان وقتها الآن'})
+              <div className="text-xs sm:text-sm text-slate-200 font-bold">
+                {next.timeFormatted} ({next.remainingFormatted || (next.diffMinutes > 0 ? `باقي ${next.diffMinutes} دقيقة` : 'حان وقتها الآن')})
               </div>
             </div>
           </div>
@@ -146,7 +163,7 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
                   </span>
                 ) : isPrayed ? (
                   <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                    <CheckCircle2 className="w-3 h-3" /> تم
+                    <CheckCircle2 className="w-3 h-3" /> تم ✅
                   </span>
                 ) : isSnoozed ? (
                   <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
@@ -177,7 +194,7 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
                     disabled={actionLoading === item.key}
                     className={`w-full py-1.5 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
                       isPrayed
-                        ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30'
+                        ? 'bg-emerald-500/20 text-emerald-300 hover:bg-rose-500/20 hover:text-rose-300 hover:border-rose-500/30 border border-emerald-500/30'
                         : 'bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-300 border border-slate-700'
                     }`}
                   >
@@ -186,7 +203,7 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
                     ) : isPrayed ? (
                       <>
                         <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>صليت ✅</span>
+                        <span>صليت (إلغاء؟)</span>
                       </>
                     ) : (
                       <span>تأكيد الصلاة</span>

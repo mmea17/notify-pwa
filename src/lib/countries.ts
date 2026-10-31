@@ -10,6 +10,7 @@ export interface CountryData {
   nameAr: string;
   nameEn: string;
   defaultMethod: string;
+  timezone: string;
   cities: CityLocation[];
 }
 
@@ -19,10 +20,11 @@ export const COUNTRIES_DATA: CountryData[] = [
     nameAr: 'مصر',
     nameEn: 'Egypt',
     defaultMethod: 'Egyptian',
+    timezone: 'Africa/Cairo',
     cities: [
       { nameAr: 'القاهرة', nameEn: 'Cairo', latitude: 30.0444, longitude: 31.2357 },
-      { nameAr: 'الإسكندرية', nameEn: 'Alexandria', latitude: 31.2001, longitude: 29.9187 },
       { nameAr: 'الجيزة', nameEn: 'Giza', latitude: 30.0131, longitude: 31.2089 },
+      { nameAr: 'الإسكندرية', nameEn: 'Alexandria', latitude: 31.2001, longitude: 29.9187 },
       { nameAr: 'المنصورة', nameEn: 'Mansoura', latitude: 31.0409, longitude: 31.3785 },
       { nameAr: 'طنطا', nameEn: 'Tanta', latitude: 30.7865, longitude: 31.0004 },
       { nameAr: 'أسيوط', nameEn: 'Assiut', latitude: 27.1783, longitude: 31.1859 },
@@ -39,6 +41,7 @@ export const COUNTRIES_DATA: CountryData[] = [
     nameAr: 'المملكة العربية السعودية',
     nameEn: 'Saudi Arabia',
     defaultMethod: 'UmmAlQura',
+    timezone: 'Asia/Riyadh',
     cities: [
       { nameAr: 'مكة المكرمة', nameEn: 'Makkah', latitude: 21.3891, longitude: 39.8579 },
       { nameAr: 'المدينة المنورة', nameEn: 'Madinah', latitude: 24.5247, longitude: 39.5692 },
@@ -55,6 +58,7 @@ export const COUNTRIES_DATA: CountryData[] = [
     nameAr: 'الإمارات العربية المتحدة',
     nameEn: 'United Arab Emirates',
     defaultMethod: 'Dubai',
+    timezone: 'Asia/Dubai',
     cities: [
       { nameAr: 'دبي', nameEn: 'Dubai', latitude: 25.2048, longitude: 55.2708 },
       { nameAr: 'أبو ظبي', nameEn: 'Abu Dhabi', latitude: 24.4539, longitude: 54.3773 },
@@ -68,6 +72,7 @@ export const COUNTRIES_DATA: CountryData[] = [
     nameAr: 'الكويت',
     nameEn: 'Kuwait',
     defaultMethod: 'Kuwait',
+    timezone: 'Asia/Kuwait',
     cities: [
       { nameAr: 'مدينة الكويت', nameEn: 'Kuwait City', latitude: 29.3759, longitude: 47.9774 },
       { nameAr: 'حولي', nameEn: 'Hawalli', latitude: 29.3328, longitude: 48.0286 },
@@ -79,6 +84,7 @@ export const COUNTRIES_DATA: CountryData[] = [
     nameAr: 'قطر',
     nameEn: 'Qatar',
     defaultMethod: 'Qatar',
+    timezone: 'Asia/Qatar',
     cities: [
       { nameAr: 'الدوحة', nameEn: 'Doha', latitude: 25.2854, longitude: 51.5310 },
       { nameAr: 'الريان', nameEn: 'Al Rayyan', latitude: 25.2919, longitude: 51.4244 }
@@ -89,6 +95,7 @@ export const COUNTRIES_DATA: CountryData[] = [
     nameAr: 'الأردن',
     nameEn: 'Jordan',
     defaultMethod: 'MuslimWorldLeague',
+    timezone: 'Asia/Amman',
     cities: [
       { nameAr: 'عمان', nameEn: 'Amman', latitude: 31.9454, longitude: 35.9284 },
       { nameAr: 'الزرقاء', nameEn: 'Zarqa', latitude: 32.0728, longitude: 36.0880 },
@@ -100,6 +107,7 @@ export const COUNTRIES_DATA: CountryData[] = [
     nameAr: 'فلسطين',
     nameEn: 'Palestine',
     defaultMethod: 'Egyptian',
+    timezone: 'Asia/Gaza',
     cities: [
       { nameAr: 'القدس الشريف', nameEn: 'Jerusalem', latitude: 31.7683, longitude: 35.2137 },
       { nameAr: 'غزة', nameEn: 'Gaza', latitude: 31.5017, longitude: 34.4668 },
@@ -111,6 +119,7 @@ export const COUNTRIES_DATA: CountryData[] = [
     nameAr: 'المغرب',
     nameEn: 'Morocco',
     defaultMethod: 'MuslimWorldLeague',
+    timezone: 'Africa/Casablanca',
     cities: [
       { nameAr: 'الرباط', nameEn: 'Rabat', latitude: 34.0209, longitude: -6.8416 },
       { nameAr: 'الدار البيضاء', nameEn: 'Casablanca', latitude: 33.5731, longitude: -7.5898 },
@@ -122,6 +131,7 @@ export const COUNTRIES_DATA: CountryData[] = [
     nameAr: 'الجزائر',
     nameEn: 'Algeria',
     defaultMethod: 'MuslimWorldLeague',
+    timezone: 'Africa/Algiers',
     cities: [
       { nameAr: 'الجزائر العاصمة', nameEn: 'Algiers', latitude: 36.7538, longitude: 3.0588 },
       { nameAr: 'وهران', nameEn: 'Oran', latitude: 35.6987, longitude: -0.6349 }
@@ -139,3 +149,8 @@ export const CALCULATION_METHODS = [
   { id: 'Karachi', nameAr: 'جامعة العلوم الإسلامية، كراتشي' },
   { id: 'NorthAmerica', nameAr: 'الجمعية الإسلامية لأمريكا الشمالية (ISNA)' }
 ];
+
+export function getCountryTimezone(countryName: string): string {
+  const found = COUNTRIES_DATA.find(c => c.nameAr === countryName || c.nameEn === countryName);
+  return found ? found.timezone : 'Africa/Cairo';
+}

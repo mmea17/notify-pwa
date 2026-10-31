@@ -4,6 +4,7 @@ import { DashboardApp } from '@/components/DashboardApp';
 import { getDB } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { calculateDailyPrayers } from '@/lib/prayer';
+import { getCountryTimezone } from '@/lib/countries';
 
 const db = getDB(Astro);
 const session = await getCurrentSession(Astro, db);
@@ -13,20 +14,49 @@ if (!session) {
 }
 
 const today = new Date();
+const todayStr = today.toISOString().split('T')[0];
+const userTimezone = getCountryTimezone(session.settings.country);
+
+const calculatedPrayers = calculateDailyPrayers(
+  session.settings.latitude,
+  session.settings.longitude,
+  session.settings.calculation_method,
+  session.settings.madhab,
+  today,
+  session.settings.pre_prayer_mins,
+  session.settings.post_prayer_mins,
+  userTimezone
+);
+
+// Load today's actual prayer statuses from D1
+try {
+  const logs = await db.prepare(
+    'SELECT prayer, status FROM prayers_log WHERE user_id = ? AND date = ?'
+  ).bind(session.user.id, todayStr).all();
+
+  if (logs.results) {
+    const logMap = new Map();
+    for (const row of logs.results) {
+      logMap.set(row.prayer, row.status);
+    }
+    const prayerKeys = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'] as const;
+    for (const key of prayerKeys) {
+      if (logMap.has(key)) {
+        calculatedPrayers[key].status = logMap.get(key) as any;
+      }
+    }
+  }
+} catch (e) {
+  console.warn('Could not load initial prayers log:', e);
+}
+
 const initialPrayersData = {
-  todayStr: today.toISOString().split('T')[0],
+  todayStr,
   city: session.settings.city,
   country: session.settings.country,
+  timezone: userTimezone,
   method: session.settings.calculation_method,
-  prayers: calculateDailyPrayers(
-    session.settings.latitude,
-    session.settings.longitude,
-    session.settings.calculation_method,
-    session.settings.madhab,
-    today,
-    session.settings.pre_prayer_mins,
-    session.settings.post_prayer_mins
-  )
+  prayers: calculatedPrayers
 };
 ---
 
