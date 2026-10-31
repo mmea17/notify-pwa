@@ -30,8 +30,9 @@ async function handleCronTick(context: any) {
 
     const now = new Date();
     const nowTime = now.getTime();
+    const nowIso = now.toISOString();
 
-    // Get all users who have active subscriptions
+    // Get all users who have active push subscriptions
     const activeUsers = await db.prepare(`
       SELECT DISTINCT u.id as user_id, u.name,
              st.country, st.city, st.latitude, st.longitude,
@@ -49,20 +50,29 @@ async function handleCronTick(context: any) {
     let notificationsDispatched = 0;
     const dispatchDetails: any[] = [];
 
+    const PRAYER_NAMES: Record<string, string> = {
+      fajr: 'الفجر',
+      dhuhr: 'الظهر',
+      asr: 'العصر',
+      maghrib: 'المغرب',
+      isha: 'العشاء'
+    };
+
     for (const user of activeUsers.results) {
       const userId = user.user_id as string;
       const preMins = Number(user.pre_prayer_mins ?? 15);
       const postMins = Number(user.post_prayer_mins ?? 15);
+      const snoozeMins = Number(user.snooze_interval_mins ?? 15);
       const userTz = getCountryTimezone((user.country as string) || 'مصر');
 
-      // Accurate local date and local HH:MM in user's timezone!
+      // Local date in user's timezone
       const userDateFormatter = new Intl.DateTimeFormat('en-CA', {
         timeZone: userTz,
         year: 'numeric',
         month: '2-digit',
         day: '2-digit'
       });
-      const todayStr = userDateFormatter.format(now); // e.g. YYYY-MM-DD in local time
+      const todayStr = userDateFormatter.format(now);
 
       const userTimeFormatter = new Intl.DateTimeFormat('en-GB', {
         timeZone: userTz,
@@ -70,9 +80,58 @@ async function handleCronTick(context: any) {
         minute: '2-digit',
         hour12: false
       });
-      const currentHHMM = userTimeFormatter.format(now); // e.g. "17:35" in local time
+      const currentHHMM = userTimeFormatter.format(now);
 
-      // 1. Calculate today's prayers for user with user's timezone
+      // ========================================================
+      // 1. CHECK ALL PENDING SNOOZED REMINDERS (ACROSS MIDNIGHT)
+      // ========================================================
+      const snoozedPrayers = await db.prepare(`
+        SELECT * FROM prayers_log
+        WHERE user_id = ?
+          AND status = 'snoozed'
+          AND next_reminder_at IS NOT NULL
+          AND next_reminder_at <= ?
+      `).bind(userId, nowIso).all();
+
+      if (snoozedPrayers.results && snoozedPrayers.results.length > 0) {
+        for (const row of snoozedPrayers.results) {
+          const prayerKey = row.prayer as string;
+          const prayerName = PRAYER_NAMES[prayerKey] || prayerKey;
+          const nextReminder = new Date(nowTime + snoozeMins * 60 * 1000).toISOString();
+
+          await sendPushToUser(db, env, userId, {
+            title: `⏰ تذكير متابعة: صلاة ${prayerName}`,
+            body: `مرت ${snoozeMins} دقيقة منذ التذكير السابق.. لا تدع الصلاة تفوتك! هل صليت الآن؟`,
+            icon: '/icons/icon-192.png',
+            badge: '/icons/icon-192.png',
+            data: {
+              type: 'prayer_snooze',
+              prayer: prayerKey,
+              prayerId: row.id,
+              userId: userId,
+              url: '/'
+            },
+            actions: [
+              { action: 'prayed', title: 'صليت ✅' },
+              { action: 'snooze_15', title: 'لسة (ذكرني بعد ربع ساعة) ⏰' }
+            ]
+          });
+
+          await db.prepare(`
+            UPDATE prayers_log
+            SET snooze_count = snooze_count + 1,
+                next_reminder_at = ?
+            WHERE id = ?
+          `).bind(nextReminder, row.id).run();
+
+          notificationsDispatched++;
+          dispatchDetails.push({ user: user.name, type: 'prayer_snooze', prayer: prayerKey });
+        }
+      }
+
+      // ========================================================
+      // 2. CHECK TODAY'S PRAYER TIMINGS (PRE-WARNING & POST-CHECK)
+      // ========================================================
       const dailyPrayers = calculateDailyPrayers(
         Number(user.latitude ?? 30.0444),
         Number(user.longitude ?? 31.2357),
@@ -84,7 +143,6 @@ async function handleCronTick(context: any) {
         userTz
       );
 
-      // Fetch user's prayer logs for today
       const logsResult = await db.prepare(
         'SELECT * FROM prayers_log WHERE user_id = ? AND date = ?'
       ).bind(userId, todayStr).all();
@@ -103,14 +161,15 @@ async function handleCronTick(context: any) {
         const log = logMap.get(pKey);
         const logId = `prayer-${userId}-${todayStr}-${pKey}`;
 
-        // If user already marked as prayed, skip all notifications for this prayer
-        if (log && log.status === 'prayed') {
+        // If user already marked as prayed or snoozed, skip
+        if (log && (log.status === 'prayed' || log.status === 'snoozed')) {
           continue;
         }
 
         const prayerTimestamp = pInfo.timestamp;
         const preWarningTimestamp = prayerTimestamp - preMins * 60 * 1000;
         const postCheckTimestamp = prayerTimestamp + postMins * 60 * 1000;
+        const postCheckWindowEnd = postCheckTimestamp + 60 * 60 * 1000; // 1-hour window
 
         // A) Pre-Prayer Reminder (e.g. 15 mins before Azan)
         if (nowTime >= preWarningTimestamp && nowTime < prayerTimestamp) {
@@ -139,12 +198,11 @@ async function handleCronTick(context: any) {
           }
         }
 
-        // B) Post-Prayer Check (e.g. 15 mins after Azan)
-        if (nowTime >= postCheckTimestamp) {
+        // B) Post-Prayer Check (within 1 hour after postCheckTimestamp)
+        if (nowTime >= postCheckTimestamp && nowTime <= postCheckWindowEnd) {
           const remindedPost = log ? Number(log.reminded_post) : 0;
           const status = log ? (log.status as string) : 'pending';
 
-          // First post-prayer notification
           if (!remindedPost && status === 'pending') {
             await sendPushToUser(db, env, userId, {
               title: `🕌 حان موعد صلاة ${pInfo.nameAr}`,
@@ -164,7 +222,7 @@ async function handleCronTick(context: any) {
               ]
             });
 
-            const nextReminder = new Date(nowTime + 15 * 60 * 1000).toISOString();
+            const nextReminder = new Date(nowTime + snoozeMins * 60 * 1000).toISOString();
             await db.prepare(`
               INSERT INTO prayers_log (id, user_id, date, prayer, status, scheduled_time, reminded_post, next_reminder_at)
               VALUES (?, ?, ?, ?, 'pending', ?, 1, ?)
@@ -173,47 +231,13 @@ async function handleCronTick(context: any) {
 
             notificationsDispatched++;
             dispatchDetails.push({ user: user.name, type: 'prayer_post', prayer: pKey });
-          } else if (status === 'snoozed' || (status === 'pending' && remindedPost)) {
-            // Check if snooze time has elapsed (e.g., 15 mins later)
-            if (log?.next_reminder_at) {
-              const nextRemindTime = new Date(log.next_reminder_at as string).getTime();
-              if (nowTime >= nextRemindTime) {
-                // Send follow-up reminder
-                await sendPushToUser(db, env, userId, {
-                  title: `⏰ تذكير متابعة: صلاة ${pInfo.nameAr}`,
-                  body: `مرت فترة منذ أذان ${pInfo.nameAr}.. لا تدع الصلاة تفوتك! هل صليت الآن؟`,
-                  icon: '/icons/icon-192.png',
-                  badge: '/icons/icon-192.png',
-                  data: {
-                    type: 'prayer_snooze',
-                    prayer: pKey,
-                    prayerId: logId,
-                    userId: userId,
-                    url: '/'
-                  },
-                  actions: [
-                    { action: 'prayed', title: 'صليت ✅' },
-                    { action: 'snooze_15', title: 'لسة (ذكرني بعد ربع ساعة) ⏰' }
-                  ]
-                });
-
-                const nextReminder = new Date(nowTime + 15 * 60 * 1000).toISOString();
-                await db.prepare(`
-                  UPDATE prayers_log
-                  SET snooze_count = snooze_count + 1,
-                      next_reminder_at = ?
-                  WHERE id = ?
-                `).bind(nextReminder, logId).run();
-
-                notificationsDispatched++;
-                dispatchDetails.push({ user: user.name, type: 'prayer_snooze', prayer: pKey });
-              }
-            }
           }
         }
       }
 
-      // 2. Check Daily Time Windows
+      // ========================================================
+      // 3. CHECK DAILY TIME WINDOWS (LOCAL TIME)
+      // ========================================================
       const userWindows = await db.prepare(
         'SELECT * FROM time_windows WHERE user_id = ? AND is_active = 1'
       ).bind(userId).all();
@@ -223,12 +247,10 @@ async function handleCronTick(context: any) {
           const startTime = (win.start_time as string).trim();
           const endTime = (win.end_time as string).trim();
 
-          // Check if current time is inside window in local time
           let isInside = false;
           if (startTime <= endTime) {
             isInside = currentHHMM >= startTime && currentHHMM <= endTime;
           } else {
-            // Over midnight window e.g. 22:00 to 02:00
             isInside = currentHHMM >= startTime || currentHHMM <= endTime;
           }
 
@@ -257,14 +279,12 @@ async function handleCronTick(context: any) {
                   }
                 }
               } else if (mode === 'random') {
-                // Check if already sent in this window today
                 const lastSentRow = await db.prepare(
                   'SELECT MAX(last_sent_at) as last_sent FROM message_pools WHERE window_id = ?'
                 ).bind(win.id).first();
 
                 const hasSentToday = lastSentRow?.last_sent && (lastSentRow.last_sent as string).startsWith(todayStr);
                 if (!hasSentToday) {
-                  // In random mode: if inside the window, send once daily
                   shouldSend = true;
                 }
               }

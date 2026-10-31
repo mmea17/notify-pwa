@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { getDB } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
-import { calculateDailyPrayers } from '@/lib/prayer';
+import { calculateDailyPrayers, getLocalDateString } from '@/lib/prayer';
 import { getCountryTimezone } from '@/lib/countries';
 
 export const GET: APIRoute = async (context) => {
@@ -13,8 +13,8 @@ export const GET: APIRoute = async (context) => {
     }
 
     const todayDate = new Date();
-    const todayStr = todayDate.toISOString().split('T')[0];
     const userTimezone = getCountryTimezone(session.settings.country);
+    const todayStr = getLocalDateString(todayDate, userTimezone);
 
     const prayers = calculateDailyPrayers(
       session.settings.latitude,
@@ -83,7 +83,8 @@ export const POST: APIRoute = async (context) => {
       return new Response(JSON.stringify({ error: 'حدد الصلاة' }), { status: 400 });
     }
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const userTimezone = getCountryTimezone(session.settings.country);
+    const todayStr = getLocalDateString(new Date(), userTimezone);
     const logId = `prayer-${session.user.id}-${todayStr}-${prayer}`;
 
     // Only update this specific prayer

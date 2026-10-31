@@ -125,6 +125,31 @@ export function formatDurationArabic(diffMinutes: number): string {
   return `باقي ${hoursText} و ${minsText}`;
 }
 
+export function getLocalDateString(date: Date = new Date(), timeZone: string = 'Africa/Cairo'): string {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timeZone || 'Africa/Cairo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  return formatter.format(date);
+}
+
+export function getLocalDateInTimezone(date: Date, timeZone: string): Date {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timeZone || 'Africa/Cairo',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour12: false
+  });
+  const parts = formatter.formatToParts(date);
+  const year = parseInt(parts.find(p => p.type === 'year')?.value || '2026');
+  const month = parseInt(parts.find(p => p.type === 'month')?.value || '1') - 1;
+  const day = parseInt(parts.find(p => p.type === 'day')?.value || '1');
+  return new Date(year, month, day);
+}
+
 export function calculateDailyPrayers(
   latitude: number,
   longitude: number,
@@ -137,9 +162,12 @@ export function calculateDailyPrayers(
 ): DayPrayers {
   const coordinates = new Coordinates(latitude, longitude);
   const params = getCalculationParameters(methodName, madhabName);
-  const prayerTimes = new PrayerTimes(coordinates, date, params);
+  
+  // Calculate prayer times based on the local calendar date in the target timezone
+  const localDate = getLocalDateInTimezone(date, timeZone);
+  const prayerTimes = new PrayerTimes(coordinates, localDate, params);
 
-  const dateStr = date.toISOString().split('T')[0];
+  const dateStr = getLocalDateString(date, timeZone);
   const now = date.getTime();
 
   const createPrayerInfo = (key: 'fajr' | 'dhuhr' | 'asr' | 'maghrib' | 'isha', nameAr: string, pDate: Date): PrayerInfo => {

@@ -27,6 +27,9 @@ export default defineConfig({
       enabled: true,
     },
   }),
+  security: {
+    checkOrigin: false,
+  },
   integrations: [react()],
   vite: {
     plugins: [

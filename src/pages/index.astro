@@ -3,7 +3,7 @@ import Layout from '@/layouts/Layout.astro';
 import { DashboardApp } from '@/components/DashboardApp';
 import { getDB } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
-import { calculateDailyPrayers } from '@/lib/prayer';
+import { calculateDailyPrayers, getLocalDateString } from '@/lib/prayer';
 import { getCountryTimezone } from '@/lib/countries';
 
 const db = getDB(Astro);
@@ -14,8 +14,8 @@ if (!session) {
 }
 
 const today = new Date();
-const todayStr = today.toISOString().split('T')[0];
 const userTimezone = getCountryTimezone(session.settings.country);
+const todayStr = getLocalDateString(today, userTimezone);
 
 const calculatedPrayers = calculateDailyPrayers(
   session.settings.latitude,
