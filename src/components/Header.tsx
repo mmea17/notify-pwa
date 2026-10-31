@@ -72,8 +72,8 @@ export const Header: React.FC<HeaderProps> = ({
 
   const NAV_ITEMS: Array<{ id: ActiveTab; label: string; icon: any; badge?: string }> = [
     { id: 'home', label: 'الرئيسية', icon: Home },
-    { id: 'tracking', label: 'المتابعة والتقويم', icon: Flame, badge: 'سلاسل' },
-    { id: 'athkar', label: 'الأذكار والتركيز', icon: Sparkles }
+    { id: 'tracking', label: 'المتابعة', icon: Flame },
+    { id: 'athkar', label: 'الأذكار', icon: Sparkles }
   ];
 
   return (

@@ -81,18 +81,6 @@ export const DashboardApp: React.FC<DashboardAppProps> = ({ user, settings: init
       />
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        {/* Quick Welcome Banner */}
-        <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              أهلاً بك، {user.name} 👋
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              لوحة تحكمك لإدارة التنبيهات المزامنة بين أجهزتك لمتابعة صلاتك وأهدافك اليومية بدقة.
-            </p>
-          </div>
-        </div>
-
         {/* 1. Push Subscription Banner (shows on all pages if not yet subscribed on this device) */}
         <PushBanner onSubscribed={() => setRefreshKey(k => k + 1)} />
 
