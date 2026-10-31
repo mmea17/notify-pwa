@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { getDB, getEnv } from '@/lib/db';
 import { calculateDailyPrayers } from '@/lib/prayer';
 import { sendPushToUser } from '@/lib/push';
+import { getCountryTimezone } from '@/lib/countries';
 
 export const GET: APIRoute = async (context) => {
   return handleCronTick(context);
@@ -28,7 +29,6 @@ async function handleCronTick(context: any) {
     }
 
     const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
     const nowTime = now.getTime();
 
     // Get all users who have active subscriptions
@@ -47,13 +47,32 @@ async function handleCronTick(context: any) {
     }
 
     let notificationsDispatched = 0;
+    const dispatchDetails: any[] = [];
 
     for (const user of activeUsers.results) {
       const userId = user.user_id as string;
       const preMins = Number(user.pre_prayer_mins ?? 15);
       const postMins = Number(user.post_prayer_mins ?? 15);
+      const userTz = getCountryTimezone((user.country as string) || 'مصر');
 
-      // 1. Calculate today's prayers for user
+      // Accurate local date and local HH:MM in user's timezone!
+      const userDateFormatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: userTz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      });
+      const todayStr = userDateFormatter.format(now); // e.g. YYYY-MM-DD in local time
+
+      const userTimeFormatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone: userTz,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+      const currentHHMM = userTimeFormatter.format(now); // e.g. "17:35" in local time
+
+      // 1. Calculate today's prayers for user with user's timezone
       const dailyPrayers = calculateDailyPrayers(
         Number(user.latitude ?? 30.0444),
         Number(user.longitude ?? 31.2357),
@@ -61,7 +80,8 @@ async function handleCronTick(context: any) {
         (user.madhab as string) || 'Shafi',
         now,
         preMins,
-        postMins
+        postMins,
+        userTz
       );
 
       // Fetch user's prayer logs for today
@@ -98,7 +118,7 @@ async function handleCronTick(context: any) {
           if (!remindedPre) {
             await sendPushToUser(db, env, userId, {
               title: `🕌 اقتربت صلاة ${pInfo.nameAr}`,
-              body: `باقي حوالي ${preMins} دقيقة على موعد الأذان (${pInfo.timeFormatted}). استعد وتوضأ.`,
+              body: `باقي حوالي ${preMins} دقيقة على موعد أذان ${pInfo.nameAr} (${pInfo.timeFormatted}). استعد وتوضأ.`,
               icon: '/icons/icon-192.png',
               badge: '/icons/icon-192.png',
               data: {
@@ -115,6 +135,7 @@ async function handleCronTick(context: any) {
             `).bind(logId, userId, todayStr, pKey, pInfo.time).run();
 
             notificationsDispatched++;
+            dispatchDetails.push({ user: user.name, type: 'prayer_pre', prayer: pKey });
           }
         }
 
@@ -127,7 +148,7 @@ async function handleCronTick(context: any) {
           if (!remindedPost && status === 'pending') {
             await sendPushToUser(db, env, userId, {
               title: `🕌 حان موعد صلاة ${pInfo.nameAr}`,
-              body: `حان الآن موعد صلاة ${pInfo.nameAr} (${pInfo.timeFormatted}). هل أديت الفريضة؟`,
+              body: `حان موعد صلاة ${pInfo.nameAr} (${pInfo.timeFormatted}). هل أديت الفريضة؟`,
               icon: '/icons/icon-192.png',
               badge: '/icons/icon-192.png',
               data: {
@@ -151,6 +172,7 @@ async function handleCronTick(context: any) {
             `).bind(logId, userId, todayStr, pKey, pInfo.time, nextReminder, nextReminder).run();
 
             notificationsDispatched++;
+            dispatchDetails.push({ user: user.name, type: 'prayer_post', prayer: pKey });
           } else if (status === 'snoozed' || (status === 'pending' && remindedPost)) {
             // Check if snooze time has elapsed (e.g., 15 mins later)
             if (log?.next_reminder_at) {
@@ -159,7 +181,7 @@ async function handleCronTick(context: any) {
                 // Send follow-up reminder
                 await sendPushToUser(db, env, userId, {
                   title: `⏰ تذكير متابعة: صلاة ${pInfo.nameAr}`,
-                  body: `مرت فترة منذ الأذان.. لا تدع الصلاة تفوتك! هل صليت الآن؟`,
+                  body: `مرت فترة منذ أذان ${pInfo.nameAr}.. لا تدع الصلاة تفوتك! هل صليت الآن؟`,
                   icon: '/icons/icon-192.png',
                   badge: '/icons/icon-192.png',
                   data: {
@@ -184,6 +206,7 @@ async function handleCronTick(context: any) {
                 `).bind(nextReminder, logId).run();
 
                 notificationsDispatched++;
+                dispatchDetails.push({ user: user.name, type: 'prayer_snooze', prayer: pKey });
               }
             }
           }
@@ -196,17 +219,20 @@ async function handleCronTick(context: any) {
       ).bind(userId).all();
 
       if (userWindows.results && userWindows.results.length > 0) {
-        const currentHH = String(now.getHours()).padStart(2, '0');
-        const currentMM = String(now.getMinutes()).padStart(2, '0');
-        const currentHHMM = `${currentHH}:${currentMM}`;
-
         for (const win of userWindows.results) {
-          const startTime = win.start_time as string;
-          const endTime = win.end_time as string;
+          const startTime = (win.start_time as string).trim();
+          const endTime = (win.end_time as string).trim();
 
-          // Check if current time is inside window
-          if (currentHHMM >= startTime && currentHHMM <= endTime) {
-            // Check messages in pool
+          // Check if current time is inside window in local time
+          let isInside = false;
+          if (startTime <= endTime) {
+            isInside = currentHHMM >= startTime && currentHHMM <= endTime;
+          } else {
+            // Over midnight window e.g. 22:00 to 02:00
+            isInside = currentHHMM >= startTime || currentHHMM <= endTime;
+          }
+
+          if (isInside) {
             const poolMessages = await db.prepare(
               'SELECT * FROM message_pools WHERE window_id = ? AND user_id = ?'
             ).bind(win.id, userId).all();
@@ -238,11 +264,8 @@ async function handleCronTick(context: any) {
 
                 const hasSentToday = lastSentRow?.last_sent && (lastSentRow.last_sent as string).startsWith(todayStr);
                 if (!hasSentToday) {
-                  // Random trigger probability per minute check (e.g. 5% chance per minute or at random slot)
-                  const rand = Math.random();
-                  if (rand < 0.05) { // ~ once every 20-30 minutes window
-                    shouldSend = true;
-                  }
+                  // In random mode: if inside the window, send once daily
+                  shouldSend = true;
                 }
               }
 
@@ -270,6 +293,7 @@ async function handleCronTick(context: any) {
                 });
 
                 notificationsDispatched++;
+                dispatchDetails.push({ user: user.name, type: 'window_message', window: win.name });
               }
             }
           }
@@ -281,7 +305,8 @@ async function handleCronTick(context: any) {
       success: true,
       timestamp: now.toISOString(),
       activeUsersCount: activeUsers.results.length,
-      notificationsDispatched
+      notificationsDispatched,
+      dispatchDetails
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
