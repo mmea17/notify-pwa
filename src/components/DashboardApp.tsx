@@ -104,10 +104,6 @@ export const DashboardApp: React.FC<DashboardAppProps> = ({ user, settings: init
         )}
       </main>
 
-      <footer className="border-t border-slate-900 py-6 text-center text-xs text-slate-500">
-        تطبيق تذكير PWA • مدعوم بـ Cloudflare Workers & Astro • مصمم لمتابعة الصلوات والأذكار ومحاربة التشتت
-      </footer>
-
       {/* Settings Modal */}
       <SettingsModal
         isOpen={isSettingsOpen}

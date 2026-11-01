@@ -86,15 +86,9 @@ export const Header: React.FC<HeaderProps> = ({
             ت
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-emerald-400 to-teal-200 bg-clip-text text-transparent">
-                تَـذْكِـيـر
-              </span>
-              <span className="text-[10px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                PWA
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 hidden sm:block">إشعارات تفاعلية لمتابعة الصلوات ومحاربة التشتت</p>
+            <span className="font-extrabold text-xl tracking-tight bg-gradient-to-r from-emerald-400 to-teal-200 bg-clip-text text-transparent">
+              تَـذْكِـيـر
+            </span>
           </div>
         </div>
 
