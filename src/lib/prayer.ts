@@ -27,6 +27,7 @@ export interface DayPrayers {
     timeFormatted: string;
     diffMinutes: number;
     remainingFormatted: string;
+    isTomorrow?: boolean;
   } | null;
 }
 
@@ -231,7 +232,8 @@ export function calculateDailyPrayers(
           nameAr: p.nameAr,
           timeFormatted: p.timeFormatted,
           diffMinutes,
-          remainingFormatted: formatDurationArabic(diffMinutes)
+          remainingFormatted: formatDurationArabic(diffMinutes),
+          isTomorrow: false
         };
         break;
       }
@@ -249,7 +251,8 @@ export function calculateDailyPrayers(
         nameAr: 'الفجر (غداً)',
         timeFormatted: formatTimeArabic(tomorrowFajr, timeZone),
         diffMinutes,
-        remainingFormatted: formatDurationArabic(diffMinutes)
+        remainingFormatted: formatDurationArabic(diffMinutes),
+        isTomorrow: true
       };
     }
   }

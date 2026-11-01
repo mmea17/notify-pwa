@@ -99,7 +99,7 @@ export const DashboardApp: React.FC<DashboardAppProps> = ({ user, settings: init
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className={`min-h-screen flex flex-col ${activeTab === 'home' ? 'h-[100dvh] max-h-[100dvh] overflow-hidden' : ''}`}>
       <Header
         user={user}
         settings={settings}
@@ -109,10 +109,10 @@ export const DashboardApp: React.FC<DashboardAppProps> = ({ user, settings: init
         onTriggerTest={handleTriggerQuickTest}
       />
 
-      <main className="flex-1 max-w-6xl w-full mx-auto px-2.5 sm:px-6 py-2.5 sm:py-8">
+      <main className={`flex-1 max-w-6xl w-full mx-auto px-2.5 sm:px-6 py-2 sm:py-8 ${activeTab === 'home' ? 'flex flex-col justify-start overflow-hidden' : ''}`}>
         {/* Offline Status Banner */}
         {isOffline && (
-          <div className="mb-2.5 sm:mb-4 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs sm:text-sm font-medium flex items-center justify-center gap-2 animate-fade-in">
+          <div className="mb-2 sm:mb-4 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs sm:text-sm font-medium flex items-center justify-center gap-2 animate-fade-in shrink-0">
             <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
             <span>أنت في وضع عدم الاتصال (Offline)</span>
           </div>
@@ -123,7 +123,7 @@ export const DashboardApp: React.FC<DashboardAppProps> = ({ user, settings: init
 
         {/* 2. Dynamic Tab Views */}
         {activeTab === 'home' && (
-          <div className="animate-fade-in">
+          <div className="flex-1 flex flex-col min-h-0 animate-fade-in">
             <PrayerTracker key={`prayers-${refreshKey}`} initialPrayers={initialPrayers} />
           </div>
         )}

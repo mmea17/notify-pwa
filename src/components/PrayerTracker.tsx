@@ -342,6 +342,24 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
   const isToday = !selectedDateStr || selectedDateStr === todayStr;
   const next = prayers.nextPrayer;
 
+  // Check whether the next upcoming prayer is tomorrow's prayer
+  const isNextTomorrow = Boolean(next?.isTomorrow || next?.nameAr?.includes('غداً'));
+
+  // Calculate if the currently selected date is tomorrow
+  const isTomorrowView = (() => {
+    if (!todayStr || !selectedDateStr) return false;
+    try {
+      const t = new Date(todayStr + 'T00:00:00');
+      t.setDate(t.getDate() + 1);
+      const year = t.getFullYear();
+      const month = String(t.getMonth() + 1).padStart(2, '0');
+      const day = String(t.getDate()).padStart(2, '0');
+      return selectedDateStr === `${year}-${month}-${day}`;
+    } catch {
+      return false;
+    }
+  })();
+
   const prayerItems = [
     { key: 'fajr', label: 'صلاة الفجر', icon: Moon, info: prayers.fajr },
     { key: 'sunrise', label: 'الشروق', icon: Sunrise, info: prayers.sunrise, isSunrise: true },
@@ -352,31 +370,41 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
   ];
 
   return (
-    <div className="bg-slate-900/50 border border-slate-800/80 rounded-2xl p-2.5 sm:p-6 mb-3 sm:mb-8 backdrop-blur-sm">
+    <div className="bg-slate-900/50 border border-slate-800/80 rounded-2xl p-3 sm:p-5 mb-0 sm:mb-8 backdrop-blur-sm">
       {/* Header Info */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2.5 sm:gap-4 mb-2.5 sm:mb-6 pb-2.5 sm:pb-5 border-b border-slate-800">
-        {/* Right side: Title & City */}
-        <div className="flex items-center gap-2">
-          <h2 className="text-base sm:text-2xl font-extrabold text-white flex items-center gap-1.5">
-            <span>{isToday ? 'صلوات اليوم' : 'مواقيت الصلاة'}</span>
-            <span className="text-emerald-400">🕌</span>
-          </h2>
-          <span className="text-[11px] sm:text-xs px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 font-medium">
-            {city}، {country}
-          </span>
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2.5 sm:gap-4 mb-2.5 sm:mb-4 pb-2.5 sm:pb-4 border-b border-slate-800/70">
+        {/* Right side: Title & City + mobile next pill */}
+        <div className="flex items-center justify-between w-full md:w-auto gap-2">
+          <div className="flex items-center gap-2">
+            <h2 className="text-base sm:text-2xl font-extrabold text-white flex items-center gap-1.5">
+              <span>{isToday ? 'صلوات اليوم' : 'مواقيت الصلاة'}</span>
+              <span className="text-emerald-400">🕌</span>
+            </h2>
+            <span className="text-[11px] sm:text-xs px-2.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 font-medium">
+              {city}، {country}
+            </span>
+          </div>
+
+          {/* On mobile: compact countdown inline badge next to title if next exists */}
+          {next && (
+            <div className="md:hidden flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold">
+              <Clock className="w-3 h-3 text-emerald-400 animate-spin-slow shrink-0" />
+              <span className="truncate">{next.nameAr}: {next.timeFormatted}</span>
+            </div>
+          )}
         </div>
 
-        {/* Left side: Stacked Countdown Card + Date Navigator with identical width */}
-        <div className="flex flex-col gap-1.5 sm:gap-2 w-full sm:w-[450px] md:w-[480px] shrink-0">
-          {/* Top: Next Prayer Countdown Card */}
+        {/* Left side: Countdown (desktop) + Date Navigator (both mobile and desktop) */}
+        <div className="flex flex-col gap-2 w-full sm:w-[450px] md:w-[480px] shrink-0">
+          {/* Top: Next Prayer Countdown Card (shown on md+ or full view) */}
           {next && (
-            <div className="w-full flex items-center justify-between gap-2.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl sm:rounded-2xl bg-gradient-to-r from-emerald-950/70 to-slate-900 border border-emerald-500/30 shadow-inner">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
-                  <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin-slow" />
+            <div className="hidden md:flex w-full items-center justify-between gap-2.5 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-emerald-950/70 to-slate-900 border border-emerald-500/30 shadow-inner">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                  <Clock className="w-4 h-4 animate-spin-slow" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-[10px] sm:text-[11px] text-emerald-400 font-semibold truncate">
+                  <div className="text-[11px] text-emerald-400 font-semibold truncate">
                     الصلاة القادمة {isToday ? '' : '(اليوم)'}: {next.nameAr}
                   </div>
                   <div className="text-xs sm:text-sm text-slate-200 font-bold truncate">
@@ -394,7 +422,7 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
               type="button"
               onClick={() => changeDateByDays(-1)}
               title="اليوم السابق"
-              className="p-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl bg-slate-800/80 hover:bg-emerald-500/20 hover:text-emerald-300 text-slate-300 transition-all border border-slate-700/60 flex items-center gap-1 active:scale-95 shrink-0"
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl bg-slate-800/80 hover:bg-emerald-500/20 hover:text-emerald-300 text-slate-300 transition-all border border-slate-700/60 flex items-center gap-1 active:scale-95 shrink-0"
             >
               <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
               <span className="text-xs font-medium hidden sm:inline">السابق</span>
@@ -416,7 +444,7 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
               type="button"
               onClick={() => changeDateByDays(1)}
               title="اليوم التالي"
-              className="p-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl bg-slate-800/80 hover:bg-emerald-500/20 hover:text-emerald-300 text-slate-300 transition-all border border-slate-700/60 flex items-center gap-1 active:scale-95 shrink-0"
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl bg-slate-800/80 hover:bg-emerald-500/20 hover:text-emerald-300 text-slate-300 transition-all border border-slate-700/60 flex items-center gap-1 active:scale-95 shrink-0"
             >
               <span className="text-xs font-medium hidden sm:inline">التالي</span>
               <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
@@ -437,57 +465,59 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
         </div>
       </div>
 
-      {/* Prayers List (Compact horizontal rows stacked vertically in a sleek list) */}
-      <div className={`flex flex-col gap-1.5 sm:gap-2.5 transition-opacity duration-200 ${dateLoading ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+      {/* Prayers List: Spacious, Clear, Highly Legible */}
+      <div className={`flex flex-col gap-2 sm:gap-2.5 transition-opacity duration-200 ${dateLoading ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
         {prayerItems.map((item) => {
           const Icon = item.icon;
           const isSunrise = item.isSunrise;
           const isPrayed = item.info?.status === 'prayed';
           const isSnoozed = item.info?.status === 'snoozed';
-          const isNext = isToday && next && next.key === item.key;
+          const isNext = isNextTomorrow
+            ? (isTomorrowView && next?.key === item.key)
+            : (isToday && next?.key === item.key);
 
           return (
             <div
               key={item.key}
-              className={`w-full rounded-xl px-2.5 py-1.5 sm:px-4 sm:py-2.5 border transition-all flex items-center justify-between gap-2 sm:gap-4 ${
+              className={`w-full rounded-xl sm:rounded-2xl px-3.5 py-2.5 sm:px-4 sm:py-3 border transition-all flex items-center justify-between gap-3 sm:gap-4 ${
                 isPrayed
-                  ? 'bg-emerald-950/25 border-emerald-500/40 shadow-sm'
+                  ? 'bg-emerald-950/20 border-emerald-500/40 shadow-sm'
                   : isNext
                   ? 'bg-gradient-to-r from-emerald-950/60 to-slate-900 border-emerald-400 shadow-md shadow-emerald-500/10 ring-1 ring-emerald-400/40'
                   : 'bg-slate-900/70 border-slate-800/80 hover:border-slate-700/80'
               }`}
             >
               {/* Right: Icon + Prayer Name + Badges */}
-              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
                 <div
-                  className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                  className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center shrink-0 ${
                     isPrayed
                       ? 'bg-emerald-500/20 text-emerald-300'
                       : isNext
                       ? 'bg-emerald-500 text-slate-950 font-bold'
-                      : 'bg-slate-800 text-slate-300'
+                      : 'bg-slate-800/90 text-slate-300'
                   }`}
                 >
-                  <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <Icon className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
                 </div>
 
-                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                  <span className={`text-xs sm:text-sm font-bold truncate ${isNext ? 'text-emerald-300 font-extrabold' : 'text-slate-200'}`}>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={`text-sm sm:text-base font-bold truncate ${isNext ? 'text-emerald-300 font-extrabold' : 'text-slate-100'}`}>
                     {item.label}
                   </span>
 
                   {isNext && (
-                    <span className="text-[9px] sm:text-[10px] text-emerald-400 font-bold bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded-full animate-pulse whitespace-nowrap">
+                    <span className="text-[10px] sm:text-xs text-emerald-400 font-bold bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full animate-pulse whitespace-nowrap">
                       القادمة ⏳
                     </span>
                   )}
                   {isSnoozed && (
-                    <span className="text-[9px] sm:text-[10px] text-amber-400 font-bold bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                    <span className="text-[10px] sm:text-xs text-amber-400 font-bold bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full whitespace-nowrap">
                       مؤجل ⏰
                     </span>
                   )}
                   {isSunrise && (
-                    <span className="text-[9px] sm:text-[10px] text-amber-400/90 font-medium bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded whitespace-nowrap">
+                    <span className="text-[10px] sm:text-xs text-amber-400/90 font-medium bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded whitespace-nowrap">
                       شروق
                     </span>
                   )}
@@ -495,8 +525,8 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
               </div>
 
               {/* Middle: Prayer Time */}
-              <div className="text-center px-1 sm:px-2 shrink-0">
-                <span className="text-xs sm:text-base font-extrabold text-white tracking-tight">
+              <div className="text-center px-2 shrink-0">
+                <span className="text-sm sm:text-base font-black text-white tracking-tight">
                   {item.info?.timeFormatted}
                 </span>
               </div>
@@ -504,24 +534,24 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
               {/* Left: Action Button / Status */}
               <div className="shrink-0">
                 {isSunrise ? (
-                  <span className="text-xs text-slate-500 font-medium px-2 py-1">
+                  <span className="text-sm text-slate-500 font-bold px-3 py-1.5">
                     —
                   </span>
                 ) : (
                   <button
                     onClick={() => handleTogglePrayer(item.key, item.info?.status)}
                     disabled={actionLoading === item.key}
-                    className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition-all flex items-center gap-1 active:scale-95 whitespace-nowrap ${
+                    className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5 active:scale-95 whitespace-nowrap ${
                       isPrayed
                         ? 'bg-emerald-500/20 text-emerald-300 hover:bg-rose-500/20 hover:text-rose-300 hover:border-rose-500/40 border border-emerald-500/40 shadow-sm'
-                        : 'bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-300 border border-slate-700/80'
+                        : 'bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-200 border border-slate-700/80 shadow-sm'
                     }`}
                   >
                     {actionLoading === item.key ? (
-                      <span className="animate-spin text-[10px]">⏳</span>
+                      <span className="animate-spin text-xs">⏳</span>
                     ) : isPrayed ? (
                       <>
-                        <CheckCircle2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-400 shrink-0" />
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                         <span>صليت (إلغاء؟)</span>
                       </>
                     ) : (
