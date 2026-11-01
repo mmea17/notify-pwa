@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS prayers_log (
   status TEXT DEFAULT 'pending',
   scheduled_time TEXT NOT NULL,
   reminded_pre INTEGER DEFAULT 0,
+  reminded_azan INTEGER DEFAULT 0,
   reminded_post INTEGER DEFAULT 0,
   snooze_count INTEGER DEFAULT 0,
   next_reminder_at TEXT,

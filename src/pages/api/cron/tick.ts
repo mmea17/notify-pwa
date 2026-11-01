@@ -83,21 +83,71 @@ async function handleCronTick(context: any) {
       const currentHHMM = userTimeFormatter.format(now);
 
       // ========================================================
-      // 1. CHECK ALL PENDING SNOOZED REMINDERS (ACROSS MIDNIGHT)
+      // 0. CALCULATE TODAY'S PRAYER TIMINGS
       // ========================================================
-      const snoozedPrayers = await db.prepare(`
+      const dailyPrayers = calculateDailyPrayers(
+        Number(user.latitude ?? 30.0444),
+        Number(user.longitude ?? 31.2357),
+        (user.calculation_method as string) || 'Egyptian',
+        (user.madhab as string) || 'Shafi',
+        now,
+        preMins,
+        postMins,
+        userTz
+      );
+
+      // ========================================================
+      // 1. CHECK ALL PENDING / UNANSWERED / SNOOZED REMINDERS
+      // ========================================================
+      // Any prayer that has not been confirmed ('prayed') whose reminder interval has arrived
+      const pendingFollowUps = await db.prepare(`
         SELECT * FROM prayers_log
         WHERE user_id = ?
-          AND status = 'snoozed'
+          AND status != 'prayed'
           AND next_reminder_at IS NOT NULL
           AND next_reminder_at <= ?
       `).bind(userId, nowIso).all();
 
-      if (snoozedPrayers.results && snoozedPrayers.results.length > 0) {
-        for (const row of snoozedPrayers.results) {
+      if (pendingFollowUps.results && pendingFollowUps.results.length > 0) {
+        for (const row of pendingFollowUps.results) {
           const prayerKey = row.prayer as string;
           const prayerName = PRAYER_NAMES[prayerKey] || prayerKey;
+          const logDate = row.date as string;
+
+          // Check if the prayer window has expired
+          let isExpired = false;
+          if (logDate < todayStr) {
+            // Prior day: only Isha can continue past midnight until today's Fajr
+            if (prayerKey !== 'isha' || nowTime >= dailyPrayers.fajr.timestamp) {
+              isExpired = true;
+            }
+          } else if (logDate === todayStr) {
+            if (prayerKey === 'fajr' && nowTime >= dailyPrayers.shuruq.timestamp) {
+              isExpired = true;
+            } else if (prayerKey === 'dhuhr' && nowTime >= dailyPrayers.asr.timestamp) {
+              isExpired = true;
+            } else if (prayerKey === 'asr' && nowTime >= dailyPrayers.maghrib.timestamp) {
+              isExpired = true;
+            } else if (prayerKey === 'maghrib' && nowTime >= dailyPrayers.isha.timestamp) {
+              isExpired = true;
+            }
+            // Today's Isha stays active throughout the night until tomorrow's Fajr
+          } else {
+            continue;
+          }
+
+          if (isExpired) {
+            await db.prepare(`
+              UPDATE prayers_log
+              SET next_reminder_at = NULL
+              WHERE id = ?
+            `).bind(row.id).run();
+            continue;
+          }
+
+          // Not expired: send follow-up reminder
           const nextReminder = new Date(nowTime + snoozeMins * 60 * 1000).toISOString();
+          const currentSnoozeCount = Number(row.snooze_count ?? 0) + 1;
 
           await sendPushToUser(db, env, userId, {
             title: `⏰ تذكير متابعة: صلاة ${prayerName}`,
@@ -119,10 +169,11 @@ async function handleCronTick(context: any) {
 
           await db.prepare(`
             UPDATE prayers_log
-            SET snooze_count = snooze_count + 1,
+            SET snooze_count = ?,
+                reminded_post = 1,
                 next_reminder_at = ?
             WHERE id = ?
-          `).bind(nextReminder, row.id).run();
+          `).bind(currentSnoozeCount, nextReminder, row.id).run();
 
           notificationsDispatched++;
           dispatchDetails.push({ user: user.name, type: 'prayer_snooze', prayer: prayerKey });
@@ -130,19 +181,8 @@ async function handleCronTick(context: any) {
       }
 
       // ========================================================
-      // 2. CHECK TODAY'S PRAYER TIMINGS (PRE-WARNING & POST-CHECK)
+      // 2. CHECK TODAY'S PRAYER TIMINGS (PRE-WARNING, EXACT AZAN & FALLBACK POST)
       // ========================================================
-      const dailyPrayers = calculateDailyPrayers(
-        Number(user.latitude ?? 30.0444),
-        Number(user.longitude ?? 31.2357),
-        (user.calculation_method as string) || 'Egyptian',
-        (user.madhab as string) || 'Shafi',
-        now,
-        preMins,
-        postMins,
-        userTz
-      );
-
       const logsResult = await db.prepare(
         'SELECT * FROM prayers_log WHERE user_id = ? AND date = ?'
       ).bind(userId, todayStr).all();
@@ -161,8 +201,8 @@ async function handleCronTick(context: any) {
         const log = logMap.get(pKey);
         const logId = `prayer-${userId}-${todayStr}-${pKey}`;
 
-        // If user already marked as prayed or snoozed, skip
-        if (log && (log.status === 'prayed' || log.status === 'snoozed')) {
+        // If user already marked as prayed, skip all notifications for this prayer
+        if (log && log.status === 'prayed') {
           continue;
         }
 
@@ -173,7 +213,7 @@ async function handleCronTick(context: any) {
 
         // A) Pre-Prayer Reminder (e.g. 15 mins before Azan)
         if (nowTime >= preWarningTimestamp && nowTime < prayerTimestamp) {
-          const remindedPre = log ? Number(log.reminded_pre) : 0;
+          const remindedPre = log ? Number(log.reminded_pre ?? 0) : 0;
           if (!remindedPre) {
             await sendPushToUser(db, env, userId, {
               title: `🕌 اقتربت صلاة ${pInfo.nameAr}`,
@@ -198,12 +238,50 @@ async function handleCronTick(context: any) {
           }
         }
 
-        // B) Post-Prayer Check (within 1 hour after postCheckTimestamp)
-        if (nowTime >= postCheckTimestamp && nowTime <= postCheckWindowEnd) {
-          const remindedPost = log ? Number(log.reminded_post) : 0;
+        // B) Exact Azan Notification (at prayer timestamp!)
+        if (nowTime >= prayerTimestamp && nowTime < prayerTimestamp + 15 * 60 * 1000) {
+          const remindedAzan = log ? Number(log.reminded_azan ?? 0) : 0;
           const status = log ? (log.status as string) : 'pending';
 
-          if (!remindedPost && status === 'pending') {
+          if (!remindedAzan && status !== 'prayed') {
+            await sendPushToUser(db, env, userId, {
+              title: `🕌 حان الآن موعد أذان صلاة ${pInfo.nameAr}`,
+              body: `الله أكبر.. حان الآن موعد أذان صلاة ${pInfo.nameAr} (${pInfo.timeFormatted}). حيّ على الصلاة.`,
+              icon: '/icons/icon-192.png',
+              badge: '/icons/icon-192.png',
+              data: {
+                type: 'prayer_azan',
+                prayer: pKey,
+                prayerId: logId,
+                userId: userId,
+                url: '/'
+              },
+              actions: [
+                { action: 'prayed', title: 'صليت ✅' },
+                { action: 'snooze_15', title: 'لسة (ذكرني بعد ربع ساعة) ⏰' }
+              ]
+            });
+
+            // Schedule the first follow-up reminder after snoozeMins (15 minutes)
+            const nextReminder = new Date(nowTime + snoozeMins * 60 * 1000).toISOString();
+            await db.prepare(`
+              INSERT INTO prayers_log (id, user_id, date, prayer, status, scheduled_time, reminded_azan, next_reminder_at)
+              VALUES (?, ?, ?, ?, 'pending', ?, 1, ?)
+              ON CONFLICT(user_id, date, prayer) DO UPDATE SET reminded_azan = 1, next_reminder_at = ?
+            `).bind(logId, userId, todayStr, pKey, pInfo.time, nextReminder, nextReminder).run();
+
+            notificationsDispatched++;
+            dispatchDetails.push({ user: user.name, type: 'prayer_azan', prayer: pKey });
+          }
+        }
+
+        // C) Fallback Post-Prayer Check (if neither Azan nor Post was fired and 15 mins passed)
+        if (nowTime >= postCheckTimestamp && nowTime <= postCheckWindowEnd) {
+          const remindedPost = log ? Number(log.reminded_post ?? 0) : 0;
+          const remindedAzan = log ? Number(log.reminded_azan ?? 0) : 0;
+          const status = log ? (log.status as string) : 'pending';
+
+          if (!remindedPost && !remindedAzan && status !== 'prayed') {
             await sendPushToUser(db, env, userId, {
               title: `🕌 حان موعد صلاة ${pInfo.nameAr}`,
               body: `حان موعد صلاة ${pInfo.nameAr} (${pInfo.timeFormatted}). هل أديت الفريضة؟`,

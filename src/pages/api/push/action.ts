@@ -31,16 +31,6 @@ export const POST: APIRoute = async (context) => {
     const prayerKey = data?.prayer || 'prayer';
 
     if (action === 'prayed') {
-      if (data?.prayerId) {
-        await db.prepare(`
-          UPDATE prayers_log
-          SET status = 'prayed',
-              responded_at = CURRENT_TIMESTAMP,
-              next_reminder_at = NULL
-          WHERE id = ?
-        `).bind(data.prayerId).run();
-      }
-
       const logId = data?.prayerId || `prayer-${userId}-${todayStr}-${prayerKey}`;
       await db.prepare(`
         INSERT INTO prayers_log (id, user_id, date, prayer, status, scheduled_time, responded_at, next_reminder_at)
@@ -50,6 +40,17 @@ export const POST: APIRoute = async (context) => {
           responded_at = CURRENT_TIMESTAMP,
           next_reminder_at = NULL
       `).bind(logId, userId, todayStr, prayerKey).run();
+
+      // If a specific prayerId was passed and differs from logId, update it too
+      if (data?.prayerId && data.prayerId !== logId) {
+        await db.prepare(`
+          UPDATE prayers_log
+          SET status = 'prayed',
+              responded_at = CURRENT_TIMESTAMP,
+              next_reminder_at = NULL
+          WHERE id = ?
+        `).bind(data.prayerId).run();
+      }
 
       // History
       const histId = 'hist-' + Date.now();
@@ -64,8 +65,18 @@ export const POST: APIRoute = async (context) => {
     if (action === 'snooze' || action === 'snooze_15') {
       const snoozeMinutes = 15;
       const nextTime = new Date(Date.now() + snoozeMinutes * 60 * 1000).toISOString();
+      const logId = data?.prayerId || `prayer-${userId}-${todayStr}-${prayerKey}`;
 
-      if (data?.prayerId) {
+      await db.prepare(`
+        INSERT INTO prayers_log (id, user_id, date, prayer, status, scheduled_time, snooze_count, next_reminder_at)
+        VALUES (?, ?, ?, ?, 'snoozed', CURRENT_TIMESTAMP, 1, ?)
+        ON CONFLICT(user_id, date, prayer) DO UPDATE SET
+          status = 'snoozed',
+          snooze_count = prayers_log.snooze_count + 1,
+          next_reminder_at = ?
+      `).bind(logId, userId, todayStr, prayerKey, nextTime, nextTime).run();
+
+      if (data?.prayerId && data.prayerId !== logId) {
         await db.prepare(`
           UPDATE prayers_log
           SET status = 'snoozed',
@@ -73,17 +84,14 @@ export const POST: APIRoute = async (context) => {
               next_reminder_at = ?
           WHERE id = ?
         `).bind(nextTime, data.prayerId).run();
-      } else {
-        const logId = `prayer-${userId}-${todayStr}-${prayerKey}`;
-        await db.prepare(`
-          INSERT INTO prayers_log (id, user_id, date, prayer, status, scheduled_time, snooze_count, next_reminder_at)
-          VALUES (?, ?, ?, ?, 'snoozed', CURRENT_TIMESTAMP, 1, ?)
-          ON CONFLICT(user_id, date, prayer) DO UPDATE SET
-            status = 'snoozed',
-            snooze_count = prayers_log.snooze_count + 1,
-            next_reminder_at = ?
-        `).bind(logId, userId, todayStr, prayerKey, nextTime, nextTime).run();
       }
+
+      // Log snooze to history
+      const histId = 'hist-' + Date.now();
+      await db.prepare(`
+        INSERT INTO notifications_history (id, user_id, type, title, body, action_taken)
+        VALUES (?, ?, 'prayer_snooze', 'تأجيل التذكير', ?, 'snoozed')
+      `).bind(histId, userId, `تم تأجيل تذكير صلاة ${prayerKey} لمدة ${snoozeMinutes} دقيقة`).run();
 
       return new Response(JSON.stringify({ success: true, status: 'snoozed', nextReminder: nextTime }), { status: 200 });
     }
