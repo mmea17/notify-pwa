@@ -112,14 +112,9 @@ export const DashboardApp: React.FC<DashboardAppProps> = ({ user, settings: init
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {/* Offline Status Banner */}
         {isOffline && (
-          <div className="mb-6 px-4 py-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs sm:text-sm font-medium flex items-center justify-between gap-3 shadow-lg animate-fade-in">
-            <div className="flex items-center gap-2.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
-              <span>أنت الآن في وضع عدم الاتصال (Offline) • مواقيت الصلوات محسوبة بدقة، وسيتم مزامنة أي تأكيدات صلاة تلقائياً عند عودة الإنترنت.</span>
-            </div>
-            <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 font-bold shrink-0">
-              أوفلاين 📡
-            </span>
+          <div className="mb-4 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs sm:text-sm font-medium flex items-center justify-center gap-2 animate-fade-in">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+            <span>أنت في وضع عدم الاتصال (Offline)</span>
           </div>
         )}
 
