@@ -44,10 +44,21 @@ const {
           navigator.serviceWorker.register('/sw.js')
             .then((registration) => {
               console.log('ServiceWorker registered successfully with scope:', registration.scope);
+              // Check for SW update immediately on page load
+              registration.update();
             })
             .catch((error) => {
               console.error('ServiceWorker registration failed:', error);
             });
+        });
+
+        // Auto reload once when the updated service worker takes control
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (!refreshing) {
+            refreshing = true;
+            window.location.reload();
+          }
         });
       }
     </script>
