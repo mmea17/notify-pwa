@@ -468,7 +468,7 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
           return (
             <div
               key={item.key}
-              className={`w-full rounded-xl sm:rounded-2xl px-3.5 py-2.5 sm:px-4 sm:py-3 border transition-all grid grid-cols-[1fr_80px_1fr] items-center ${
+              className={`w-full rounded-xl sm:rounded-2xl px-3 sm:px-4 py-2.5 sm:py-3 border transition-all grid grid-cols-[1.25fr_75px_0.75fr] items-center ${
                 isPrayed
                   ? 'bg-emerald-950/20 border-emerald-500/40 shadow-sm'
                   : isNext
@@ -476,10 +476,10 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
                   : 'bg-slate-900/70 border-slate-800/80 hover:border-slate-700/80'
               }`}
             >
-              {/* Right: Icon + Prayer Name (Spacious, no badges eating space) */}
-              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              {/* Right: Icon + Prayer Name (Full width, zero truncation) */}
+              <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
                 <div
-                  className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                  className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 ${
                     isPrayed
                       ? 'bg-emerald-500/20 text-emerald-300'
                       : isNext
@@ -487,16 +487,16 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
                       : 'bg-slate-800/90 text-slate-300'
                   }`}
                 >
-                  <Icon className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                  <Icon className="w-4 h-4" />
                 </div>
 
-                <span className={`text-sm sm:text-base font-bold truncate ${isNext ? 'text-emerald-300 font-extrabold' : 'text-slate-100'}`}>
+                <span className={`text-sm sm:text-base font-bold whitespace-nowrap ${isNext ? 'text-emerald-300 font-extrabold' : 'text-slate-100'}`}>
                   {item.label}
                 </span>
               </div>
 
-              {/* Middle: Prayer Time (Fixed width & centered for 100% symmetric vertical alignment) */}
-              <div className="w-20 text-center mx-auto shrink-0">
+              {/* Middle: Prayer Time (Shifted slightly to the left, 100% symmetric vertical alignment) */}
+              <div className="w-[75px] text-center mx-auto shrink-0">
                 <span className="text-sm sm:text-base font-black text-white tracking-tight">
                   {item.info?.timeFormatted}
                 </span>
@@ -512,7 +512,7 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
                   <button
                     onClick={() => handleTogglePrayer(item.key, item.info?.status)}
                     disabled={actionLoading === item.key}
-                    className={`px-3 sm:px-4 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1 active:scale-95 whitespace-nowrap min-w-[62px] ${
+                    className={`px-2.5 sm:px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1 active:scale-95 whitespace-nowrap min-w-[56px] ${
                       isPrayed
                         ? 'bg-emerald-500/20 text-emerald-300 hover:bg-rose-500/20 hover:text-rose-300 hover:border-rose-500/40 border border-emerald-500/40 shadow-sm'
                         : 'bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-200 border border-slate-700/80 shadow-sm'
