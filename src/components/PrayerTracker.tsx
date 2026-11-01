@@ -465,13 +465,12 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
         </div>
       </div>
 
-      {/* Prayers List: Spacious, Clear, Highly Legible */}
+      {/* Prayers List: Spacious, Clear, Symmetrical Grid */}
       <div className={`flex flex-col gap-2 sm:gap-2.5 transition-opacity duration-200 ${dateLoading ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
         {prayerItems.map((item) => {
           const Icon = item.icon;
           const isSunrise = item.isSunrise;
           const isPrayed = item.info?.status === 'prayed';
-          const isSnoozed = item.info?.status === 'snoozed';
           const isNext = isNextTomorrow
             ? (isTomorrowView && next?.key === item.key)
             : (isToday && next?.key === item.key);
@@ -479,7 +478,7 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
           return (
             <div
               key={item.key}
-              className={`w-full rounded-xl sm:rounded-2xl px-3.5 py-2.5 sm:px-4 sm:py-3 border transition-all flex items-center justify-between gap-3 sm:gap-4 ${
+              className={`w-full rounded-xl sm:rounded-2xl px-3.5 py-2.5 sm:px-4 sm:py-3 border transition-all grid grid-cols-[1fr_80px_1fr] items-center ${
                 isPrayed
                   ? 'bg-emerald-950/20 border-emerald-500/40 shadow-sm'
                   : isNext
@@ -487,10 +486,10 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
                   : 'bg-slate-900/70 border-slate-800/80 hover:border-slate-700/80'
               }`}
             >
-              {/* Right: Icon + Prayer Name + Badges */}
-              <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+              {/* Right: Icon + Prayer Name (Spacious, no badges eating space) */}
+              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                 <div
-                  className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                  className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
                     isPrayed
                       ? 'bg-emerald-500/20 text-emerald-300'
                       : isNext
@@ -501,38 +500,20 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
                   <Icon className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
                 </div>
 
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className={`text-sm sm:text-base font-bold truncate ${isNext ? 'text-emerald-300 font-extrabold' : 'text-slate-100'}`}>
-                    {item.label}
-                  </span>
-
-                  {isNext && (
-                    <span className="text-[10px] sm:text-xs text-emerald-400 font-bold bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full animate-pulse whitespace-nowrap">
-                      القادمة ⏳
-                    </span>
-                  )}
-                  {isSnoozed && (
-                    <span className="text-[10px] sm:text-xs text-amber-400 font-bold bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full whitespace-nowrap">
-                      مؤجل ⏰
-                    </span>
-                  )}
-                  {isSunrise && (
-                    <span className="text-[10px] sm:text-xs text-amber-400/90 font-medium bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded whitespace-nowrap">
-                      شروق
-                    </span>
-                  )}
-                </div>
+                <span className={`text-sm sm:text-base font-bold truncate ${isNext ? 'text-emerald-300 font-extrabold' : 'text-slate-100'}`}>
+                  {item.label}
+                </span>
               </div>
 
-              {/* Middle: Prayer Time */}
-              <div className="text-center px-2 shrink-0">
+              {/* Middle: Prayer Time (Fixed width & centered for 100% symmetric vertical alignment) */}
+              <div className="w-20 text-center mx-auto shrink-0">
                 <span className="text-sm sm:text-base font-black text-white tracking-tight">
                   {item.info?.timeFormatted}
                 </span>
               </div>
 
-              {/* Left: Action Button / Status */}
-              <div className="shrink-0">
+              {/* Left: Action Button / Status (Compact "صليت" / "إلغاء") */}
+              <div className="flex items-center justify-end">
                 {isSunrise ? (
                   <span className="text-sm text-slate-500 font-bold px-3 py-1.5">
                     —
@@ -541,7 +522,7 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
                   <button
                     onClick={() => handleTogglePrayer(item.key, item.info?.status)}
                     disabled={actionLoading === item.key}
-                    className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5 active:scale-95 whitespace-nowrap ${
+                    className={`px-3 sm:px-4 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1 active:scale-95 whitespace-nowrap min-w-[62px] ${
                       isPrayed
                         ? 'bg-emerald-500/20 text-emerald-300 hover:bg-rose-500/20 hover:text-rose-300 hover:border-rose-500/40 border border-emerald-500/40 shadow-sm'
                         : 'bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-200 border border-slate-700/80 shadow-sm'
@@ -552,10 +533,10 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
                     ) : isPrayed ? (
                       <>
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        <span>صليت (إلغاء؟)</span>
+                        <span>إلغاء</span>
                       </>
                     ) : (
-                      <span>تأكيد الصلاة</span>
+                      <span>صليت</span>
                     )}
                   </button>
                 )}
