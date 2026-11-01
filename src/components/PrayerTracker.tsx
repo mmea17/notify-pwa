@@ -147,8 +147,8 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
           </span>
         </div>
 
-        {/* Left side: Stacked Countdown Card + Date Navigator with identical fixed width */}
-        <div className="flex flex-col gap-2 w-full sm:w-[390px] shrink-0">
+        {/* Left side: Stacked Countdown Card + Date Navigator with identical width */}
+        <div className="flex flex-col gap-2 w-full sm:w-[450px] md:w-[480px] shrink-0">
           {/* Top: Next Prayer Countdown Card */}
           {next && (
             <div className="w-full flex items-center justify-between gap-3 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-emerald-950/70 to-slate-900 border border-emerald-500/30 shadow-inner">
@@ -169,25 +169,25 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
           )}
 
           {/* Bottom: Day Navigation Buttons & Gregorian / Hijri Dates */}
-          <div className="w-full flex items-center justify-between gap-1.5 bg-slate-950/70 border border-slate-800/90 p-1.5 rounded-2xl shadow-inner">
+          <div className="w-full flex items-center justify-between gap-2 bg-slate-950/70 border border-slate-800/90 p-1.5 rounded-2xl shadow-inner">
             {/* Previous Day Button */}
             <button
               type="button"
               onClick={() => changeDateByDays(-1)}
               title="اليوم السابق"
-              className="p-1.5 sm:px-2.5 rounded-xl bg-slate-800/80 hover:bg-emerald-500/20 hover:text-emerald-300 text-slate-300 transition-all border border-slate-700/60 flex items-center gap-1 active:scale-95 shrink-0"
+              className="px-2.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-emerald-500/20 hover:text-emerald-300 text-slate-300 transition-all border border-slate-700/60 flex items-center gap-1 active:scale-95 shrink-0"
             >
               <ChevronRight className="w-4 h-4" />
-              <span className="text-xs hidden sm:inline font-medium">السابق</span>
+              <span className="text-xs font-medium">السابق</span>
             </button>
 
             {/* Date Info Display (Gregorian & Hijri) */}
-            <div className="text-center px-2 flex-1 min-w-0">
-              <div className="flex items-center justify-center gap-1.5 text-xs sm:text-sm font-bold text-white truncate">
+            <div className="text-center px-1.5 flex-1 min-w-0">
+              <div className="flex items-center justify-center gap-1.5 text-xs sm:text-sm font-bold text-white">
                 <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span className="truncate">{gregorianFormatted || selectedDateStr}</span>
+                <span className="whitespace-nowrap">{gregorianFormatted || selectedDateStr}</span>
               </div>
-              <div className="text-[11px] text-emerald-400/90 font-medium mt-0.5 truncate">
+              <div className="text-[11px] text-emerald-400/90 font-medium mt-0.5 whitespace-nowrap">
                 {hijriFormatted}
               </div>
             </div>
@@ -197,26 +197,23 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
               type="button"
               onClick={() => changeDateByDays(1)}
               title="اليوم التالي"
-              className="p-1.5 sm:px-2.5 rounded-xl bg-slate-800/80 hover:bg-emerald-500/20 hover:text-emerald-300 text-slate-300 transition-all border border-slate-700/60 flex items-center gap-1 active:scale-95 shrink-0"
+              className="px-2.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-emerald-500/20 hover:text-emerald-300 text-slate-300 transition-all border border-slate-700/60 flex items-center gap-1 active:scale-95 shrink-0"
             >
-              <span className="text-xs hidden sm:inline font-medium">التالي</span>
+              <span className="text-xs font-medium">التالي</span>
               <ChevronLeft className="w-4 h-4" />
             </button>
 
-            {/* Today Button: Reserved space when isToday so layout NEVER jumps or shifts */}
-            <button
-              type="button"
-              onClick={goToToday}
-              disabled={isToday}
-              className={`text-[11px] font-bold px-2 py-1 rounded-xl border transition-all whitespace-nowrap shrink-0 ${
-                isToday
-                  ? 'opacity-0 pointer-events-none w-0 sm:w-auto overflow-hidden'
-                  : 'opacity-100 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/40 active:scale-95 shadow-sm shadow-emerald-500/20'
-              }`}
-              title="الرجوع إلى تاريخ اليوم"
-            >
-              اليوم
-            </button>
+            {/* Today Button: Only rendered when viewing a different day, so on current day 'التالي' sits flush at the end */}
+            {!isToday && (
+              <button
+                type="button"
+                onClick={goToToday}
+                className="text-xs font-bold px-2.5 py-1.5 rounded-xl border bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/40 active:scale-95 shadow-sm shadow-emerald-500/20 whitespace-nowrap shrink-0 transition-all"
+                title="الرجوع إلى تاريخ اليوم"
+              >
+                اليوم
+              </button>
+            )}
           </div>
         </div>
       </div>
