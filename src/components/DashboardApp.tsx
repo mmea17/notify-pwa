@@ -29,6 +29,23 @@ export const DashboardApp: React.FC<DashboardAppProps> = ({ user, settings: init
     };
   }, []);
 
+  // Pre-cache tracking history for current month in the background so "المتابعة" is never zeroed out offline
+  useEffect(() => {
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      fetch(`/api/prayers/history?year=${year}&month=${month}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.todayStr) {
+            localStorage.setItem(`cached_history_${year}_${month}`, JSON.stringify(data));
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
+
   // Tab management (home | tracking | athkar) with URL hash synchronization
   const [activeTab, setActiveTab] = useState<ActiveTab>('home');
 

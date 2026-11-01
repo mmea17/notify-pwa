@@ -10,6 +10,8 @@ import {
   ChevronLeft,
   Calendar
 } from 'lucide-react';
+import { calculateDailyPrayers } from '@/lib/prayer';
+import { getCountryTimezone } from '@/lib/countries';
 
 interface PrayerTrackerProps {
   initialPrayers?: any;
@@ -24,6 +26,38 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
     initialPrayers?.selectedDateStr || initialPrayers?.todayStr || ''
   );
   const [hasOfflineQueue, setHasOfflineQueue] = useState(false);
+
+  const getCachedSettings = () => {
+    try {
+      const raw = localStorage.getItem('cached_prayer_settings');
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return {
+      latitude: 30.0444,
+      longitude: 31.2357,
+      calculationMethod: 'Egyptian',
+      madhab: 'Shafi',
+      country: 'مصر',
+      city: 'الجيزة',
+      timeZone: 'Africa/Cairo'
+    };
+  };
+
+  const saveSettingsFromData = (source: any) => {
+    if (!source) return;
+    const settings = {
+      latitude: source.latitude ?? 30.0444,
+      longitude: source.longitude ?? 31.2357,
+      calculationMethod: source.method || 'Egyptian',
+      madhab: source.madhab || 'Shafi',
+      country: source.country || 'مصر',
+      city: source.city || 'الجيزة',
+      timeZone: source.timezone || getCountryTimezone(source.country || 'مصر')
+    };
+    try {
+      localStorage.setItem('cached_prayer_settings', JSON.stringify(settings));
+    } catch (e) {}
+  };
 
   // Queue offline prayer toggle to localStorage
   const queueOfflinePrayerAction = (prayer: string, status: string, date: string) => {
@@ -65,42 +99,119 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
 
   const fetchPrayers = async (dateStr?: string) => {
     const target = dateStr !== undefined ? dateStr : selectedDate;
-    try {
-      if (dateStr) setDateLoading(true);
-      const url = target ? `/api/prayers/today?date=${target}` : '/api/prayers/today';
-      const res = await fetch(url);
-      if (res.ok) {
-        const json = await res.json();
-        if (!json.offline && json.prayers) {
-          setData(json);
-          try {
-            localStorage.setItem('cached_prayers_' + (json.selectedDateStr || 'today'), JSON.stringify(json));
-            localStorage.setItem('last_active_prayers', JSON.stringify(json));
-          } catch (e) {}
-          if (!selectedDate && json.selectedDateStr) {
-            setSelectedDate(json.selectedDateStr);
+    if (dateStr) setDateLoading(true);
+
+    // If online, attempt network fetch
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      try {
+        const url = target ? `/api/prayers/today?date=${target}` : '/api/prayers/today';
+        const res = await fetch(url);
+        if (res.ok) {
+          const json = await res.json();
+          if (!json.offline && json.prayers) {
+            setData(json);
+            saveSettingsFromData(json);
+            try {
+              localStorage.setItem('cached_prayers_' + (json.selectedDateStr || 'today'), JSON.stringify(json));
+              localStorage.setItem('last_active_prayers', JSON.stringify(json));
+            } catch (e) {}
+            if (!selectedDate && json.selectedDateStr) {
+              setSelectedDate(json.selectedDateStr);
+            }
+            setDateLoading(false);
+            setLoading(false);
+            return;
           }
-          return;
         }
+      } catch (err) {
+        console.warn('Network error fetching prayers, checking offline fallback:', err);
       }
-    } catch (err) {
-      console.warn('Network error fetching prayers, checking offline cache:', err);
-    } finally {
-      setLoading(false);
-      setDateLoading(false);
     }
 
-    // Offline cache fallback
+    // OFFLINE ENGINE: Local calculation & cache
     try {
-      const cached = localStorage.getItem('cached_prayers_' + (target || 'today')) || localStorage.getItem('last_active_prayers');
+      // 1. Check if we already have this exact day in localStorage
+      const cached = localStorage.getItem('cached_prayers_' + (target || 'today'));
       if (cached) {
         const parsed = JSON.parse(cached);
         setData(parsed);
         if (!selectedDate && parsed.selectedDateStr) {
           setSelectedDate(parsed.selectedDateStr);
         }
+        setDateLoading(false);
+        setLoading(false);
+        return;
       }
-    } catch (e) {}
+
+      // 2. Compute astronomical prayers for this day locally
+      const settings = getCachedSettings();
+      const baseStr = target || new Date().toISOString().split('T')[0];
+      const [y, m, d] = baseStr.split('-').map(Number);
+      const targetDateObj = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+
+      const calculated = calculateDailyPrayers(
+        settings.latitude,
+        settings.longitude,
+        settings.calculationMethod,
+        settings.madhab,
+        targetDateObj,
+        15,
+        15,
+        settings.timeZone
+      );
+
+      // Compute today's next prayer for countdown consistency
+      const todayCalculated = calculateDailyPrayers(
+        settings.latitude,
+        settings.longitude,
+        settings.calculationMethod,
+        settings.madhab,
+        new Date(),
+        15,
+        15,
+        settings.timeZone
+      );
+      calculated.nextPrayer = todayCalculated.nextPrayer;
+
+      // Apply any offline queued prayer actions for this date
+      try {
+        const queue = JSON.parse(localStorage.getItem('offline_prayer_actions') || '[]');
+        const dateActions = queue.filter((a: any) => a.date === target);
+        for (const a of dateActions) {
+          if (calculated[a.prayer as 'fajr']) {
+            calculated[a.prayer as 'fajr'].status = a.status;
+          }
+        }
+      } catch (e) {}
+
+      const isToday = target === todayCalculated.dateStr;
+
+      const localPayload = {
+        todayStr: todayCalculated.dateStr,
+        selectedDateStr: target,
+        isToday,
+        gregorianFormatted: calculated.gregorianFormatted,
+        hijriFormatted: calculated.hijriFormatted,
+        city: settings.city,
+        country: settings.country,
+        timezone: settings.timeZone,
+        method: settings.calculationMethod,
+        prayers: calculated
+      };
+
+      setData(localPayload);
+      try {
+        localStorage.setItem('cached_prayers_' + target, JSON.stringify(localPayload));
+      } catch (e) {}
+      if (!selectedDate) {
+        setSelectedDate(target);
+      }
+    } catch (e) {
+      console.error('Failed to calculate prayers locally:', e);
+    } finally {
+      setDateLoading(false);
+      setLoading(false);
+    }
   };
 
   useEffect(() => {

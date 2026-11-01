@@ -21,18 +21,35 @@ interface TrackingViewProps {
 }
 
 export const TrackingView: React.FC<TrackingViewProps> = () => {
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-
   const today = new Date();
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(today.getMonth() + 1);
-  const [selectedDateStr, setSelectedDateStr] = useState<string>('');
+
+  // Initialize data directly from cached localStorage so it NEVER shows 0 or spinner if cached!
+  const [data, setData] = useState<any>(() => {
+    try {
+      const cached = localStorage.getItem(`cached_history_${today.getFullYear()}_${today.getMonth() + 1}`);
+      return cached ? JSON.parse(cached) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+  const [loading, setLoading] = useState(!data);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [selectedDateStr, setSelectedDateStr] = useState<string>(() => {
+    try {
+      const cached = localStorage.getItem(`cached_history_${today.getFullYear()}_${today.getMonth() + 1}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        return parsed.todayStr || '';
+      }
+    } catch (e) {}
+    return '';
+  });
 
   const fetchHistory = async (year = currentYear, month = currentMonth) => {
     try {
-      setLoading(true);
+      if (!data) setLoading(true);
       const res = await fetch(`/api/prayers/history?year=${year}&month=${month}`);
       if (res.ok) {
         const json = await res.json();
@@ -44,6 +61,7 @@ export const TrackingView: React.FC<TrackingViewProps> = () => {
           if (!selectedDateStr) {
             setSelectedDateStr(json.todayStr);
           }
+          setLoading(false);
           return;
         }
       }
@@ -68,6 +86,12 @@ export const TrackingView: React.FC<TrackingViewProps> = () => {
 
   useEffect(() => {
     fetchHistory(currentYear, currentMonth);
+
+    const onOnline = () => {
+      fetchHistory(currentYear, currentMonth);
+    };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
   }, [currentYear, currentMonth]);
 
   const changeMonth = (delta: number) => {
@@ -98,30 +122,67 @@ export const TrackingView: React.FC<TrackingViewProps> = () => {
     setActionLoading(prayerKey);
 
     // Optimistic update
+    let updatedData: any = null;
     setData((prev: any) => {
       if (!prev || !prev.days) return prev;
-      return {
+      const newDays = prev.days.map((d: any) => {
+        if (d.date !== selectedDateStr) return d;
+        const currentP = d.prayers[prayerKey];
+        const updatedPrayers = {
+          ...d.prayers,
+          [prayerKey]: {
+            ...currentP,
+            status: newStatus
+          }
+        };
+        const prayedCount = Object.values(updatedPrayers).filter((p: any) => p.status === 'prayed').length;
+        return {
+          ...d,
+          prayedCount,
+          isComplete: prayedCount === 5,
+          prayers: updatedPrayers
+        };
+      });
+
+      updatedData = {
         ...prev,
-        days: prev.days.map((d: any) => {
-          if (d.date !== selectedDateStr) return d;
-          const currentP = d.prayers[prayerKey];
-          const updatedPrayers = {
-            ...d.prayers,
-            [prayerKey]: {
-              ...currentP,
-              status: newStatus
-            }
-          };
-          const prayedCount = Object.values(updatedPrayers).filter((p: any) => p.status === 'prayed').length;
-          return {
-            ...d,
-            prayedCount,
-            isComplete: prayedCount === 5,
-            prayers: updatedPrayers
-          };
-        })
+        days: newDays
       };
+      return updatedData;
     });
+
+    // Save updated data to localStorage immediately for offline persistence
+    if (updatedData) {
+      try {
+        localStorage.setItem(`cached_history_${currentYear}_${currentMonth}`, JSON.stringify(updatedData));
+      } catch (e) {}
+    }
+
+    // Queue in offline actions
+    try {
+      const queue = JSON.parse(localStorage.getItem('offline_prayer_actions') || '[]');
+      const filtered = queue.filter((item: any) => !(item.prayer === prayerKey && item.date === selectedDateStr));
+      filtered.push({ prayer: prayerKey, status: newStatus, date: selectedDateStr, timestamp: Date.now() });
+      localStorage.setItem('offline_prayer_actions', JSON.stringify(filtered));
+    } catch (e) {}
+
+    // Also update cached_prayers_ for that day if cached
+    try {
+      const dayCache = localStorage.getItem('cached_prayers_' + selectedDateStr);
+      if (dayCache) {
+        const parsed = JSON.parse(dayCache);
+        if (parsed?.prayers?.[prayerKey]) {
+          parsed.prayers[prayerKey].status = newStatus;
+          localStorage.setItem('cached_prayers_' + selectedDateStr, JSON.stringify(parsed));
+        }
+      }
+    } catch (e) {}
+
+    // If offline, finish early
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setActionLoading(null);
+      return;
+    }
 
     try {
       const res = await fetch('/api/prayers/today', {
@@ -134,12 +195,10 @@ export const TrackingView: React.FC<TrackingViewProps> = () => {
         })
       });
       if (res.ok) {
-        // Refresh to accurately recalculate streaks
         fetchHistory(currentYear, currentMonth);
       }
     } catch (err) {
-      console.error(err);
-      fetchHistory(currentYear, currentMonth);
+      console.warn('Network error toggling prayer from history, queued for sync:', err);
     } finally {
       setActionLoading(null);
     }

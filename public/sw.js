@@ -1,6 +1,6 @@
-// Notify PWA Service Worker with Offline Shell Caching & Interactive Push
+// Notify PWA Service Worker with Fast Offline Shell Caching & Interactive Push
 
-const CACHE_NAME = 'notify-pwa-v2';
+const CACHE_NAME = 'notify-pwa-v3';
 const STATIC_ASSETS = [
   '/',
   '/manifest.webmanifest',
@@ -37,7 +37,7 @@ self.addEventListener('activate', (event) => {
   return self.clients.claim();
 });
 
-// 3. Intercept Fetch Requests (Offline Support & Caching)
+// 3. Intercept Fetch Requests (Instant Offline Support & Caching)
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
@@ -47,39 +47,46 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // A. Navigation Requests (e.g. visiting / or refreshing page) -> Network-First, Cache Fallback
+  // A. Navigation Requests (Opening or refreshing pages)
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
-        .then((networkResponse) => {
+      (async () => {
+        const cache = await caches.open(CACHE_NAME);
+
+        // 1. If device is offline, return cache INSTANTLY (0ms delay, no timeout wait!)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = (await cache.match(request)) || (await cache.match('/'));
+          if (cached) return cached;
+        }
+
+        // 2. If online, fetch with a 1.2s timeout to avoid any 5-7s browser hanging
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 1200);
+          const networkResponse = await fetch(request, { signal: controller.signal });
+          clearTimeout(timeoutId);
+
           if (networkResponse && networkResponse.status === 200) {
-            const responseClone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseClone);
-              cache.put('/', networkResponse.clone());
-            });
+            cache.put(request, networkResponse.clone());
+            cache.put('/', networkResponse.clone());
+            return networkResponse;
           }
-          return networkResponse;
-        })
-        .catch(async () => {
-          const cache = await caches.open(CACHE_NAME);
-          const cachedResponse = await cache.match(request);
-          if (cachedResponse) {
-            return cachedResponse;
-          }
-          const rootCached = await cache.match('/');
-          if (rootCached) {
-            return rootCached;
-          }
-          return new Response('<h1>غير متصل بالإنترنت</h1>', {
-            headers: { 'Content-Type': 'text/html; charset=utf-8' }
-          });
-        })
+        } catch (e) {
+          // Timeout or network error -> fall back to cache immediately
+        }
+
+        const fallbackCached = (await cache.match(request)) || (await cache.match('/'));
+        if (fallbackCached) return fallbackCached;
+
+        return new Response('<h1>غير متصل بالإنترنت</h1>', {
+          headers: { 'Content-Type': 'text/html; charset=utf-8' }
+        });
+      })()
     );
     return;
   }
 
-  // B. Static Assets (_astro bundles, css, js, icons, images, manifest) -> Stale-While-Revalidate
+  // B. Static Assets (_astro bundles, css, js, icons, images, manifest) -> Cache-First with Background Update
   const isStaticAsset =
     url.pathname.startsWith('/_astro/') ||
     url.pathname.startsWith('/icons/') ||
@@ -92,47 +99,71 @@ self.addEventListener('fetch', (event) => {
   if (isStaticAsset) {
     event.respondWith(
       caches.match(request).then((cachedResponse) => {
-        const fetchPromise = fetch(request)
-          .then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              const responseClone = networkResponse.clone();
-              caches.open(CACHE_NAME).then((cache) => {
-                cache.put(request, responseClone);
-              });
-            }
-            return networkResponse;
-          })
-          .catch(() => cachedResponse);
+        // If in cache, return immediately for 0ms load
+        if (cachedResponse) {
+          // Update in background if online
+          if (navigator.onLine) {
+            fetch(request).then((networkResponse) => {
+              if (networkResponse && networkResponse.status === 200) {
+                caches.open(CACHE_NAME).then((cache) => cache.put(request, networkResponse));
+              }
+            }).catch(() => {});
+          }
+          return cachedResponse;
+        }
 
-        return cachedResponse || fetchPromise;
+        // Not in cache, fetch from network
+        return fetch(request).then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
+          return networkResponse;
+        });
       })
     );
     return;
   }
 
-  // C. API GET Requests (/api/*) -> Network-First, Cache Fallback
+  // C. API GET Requests (/api/*)
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
-      fetch(request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const responseClone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseClone);
-            });
-          }
-          return networkResponse;
-        })
-        .catch(async () => {
-          const cached = await caches.match(request);
-          if (cached) {
-            return cached;
-          }
-          return new Response(JSON.stringify({ error: 'offline', offline: true }), {
+      (async () => {
+        const cache = await caches.open(CACHE_NAME);
+
+        // If explicitly offline, return cached API response immediately
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await cache.match(request);
+          if (cached) return cached;
+          return new Response(JSON.stringify({ offline: true }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' }
           });
-        })
+        }
+
+        // If online, try network with 1.2s timeout
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 1200);
+          const networkResponse = await fetch(request, { signal: controller.signal });
+          clearTimeout(timeoutId);
+
+          if (networkResponse && networkResponse.status === 200) {
+            cache.put(request, networkResponse.clone());
+            return networkResponse;
+          }
+        } catch (e) {
+          // Fall back to cache
+        }
+
+        const cached = await cache.match(request);
+        if (cached) return cached;
+
+        return new Response(JSON.stringify({ offline: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      })()
     );
     return;
   }
