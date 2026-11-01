@@ -372,39 +372,29 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
   return (
     <div className="bg-slate-900/50 border border-slate-800/80 rounded-2xl p-3 sm:p-5 mb-0 sm:mb-8 backdrop-blur-sm">
       {/* Header Info */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2.5 sm:gap-4 mb-2.5 sm:mb-4 pb-2.5 sm:pb-4 border-b border-slate-800/70">
-        {/* Right side: Title & City + mobile next pill */}
-        <div className="flex items-center justify-between w-full md:w-auto gap-2">
-          <div className="flex items-center gap-2">
-            <h2 className="text-base sm:text-2xl font-extrabold text-white flex items-center gap-1.5">
-              <span>{isToday ? 'صلوات اليوم' : 'مواقيت الصلاة'}</span>
-              <span className="text-emerald-400">🕌</span>
-            </h2>
-            <span className="text-[11px] sm:text-xs px-2.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 font-medium">
-              {city}، {country}
-            </span>
-          </div>
-
-          {/* On mobile: compact countdown inline badge next to title if next exists */}
-          {next && (
-            <div className="md:hidden flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold">
-              <Clock className="w-3 h-3 text-emerald-400 animate-spin-slow shrink-0" />
-              <span className="truncate">{next.nameAr}: {next.timeFormatted}</span>
-            </div>
-          )}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2 sm:gap-4 mb-2 sm:mb-4 pb-2 sm:pb-4 border-b border-slate-800/70">
+        {/* Right side: Title & City */}
+        <div className="flex items-center gap-2">
+          <h2 className="text-base sm:text-2xl font-extrabold text-white flex items-center gap-1.5">
+            <span>{isToday ? 'صلوات اليوم' : 'مواقيت الصلاة'}</span>
+            <span className="text-emerald-400">🕌</span>
+          </h2>
+          <span className="text-[11px] sm:text-xs px-2.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 font-medium">
+            {city}، {country}
+          </span>
         </div>
 
-        {/* Left side: Countdown (desktop) + Date Navigator (both mobile and desktop) */}
-        <div className="flex flex-col gap-2 w-full sm:w-[450px] md:w-[480px] shrink-0">
-          {/* Top: Next Prayer Countdown Card (shown on md+ or full view) */}
+        {/* Left side: Dedicated Countdown Card + Date Navigator */}
+        <div className="flex flex-col gap-1.5 sm:gap-2 w-full sm:w-[450px] md:w-[480px] shrink-0">
+          {/* Top: Next Prayer Countdown Card (Restored for both mobile & desktop) */}
           {next && (
-            <div className="hidden md:flex w-full items-center justify-between gap-2.5 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-emerald-950/70 to-slate-900 border border-emerald-500/30 shadow-inner">
+            <div className="w-full flex items-center justify-between gap-2.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl sm:rounded-2xl bg-gradient-to-r from-emerald-950/70 to-slate-900 border border-emerald-500/30 shadow-inner">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
-                  <Clock className="w-4 h-4 animate-spin-slow" />
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                  <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin-slow" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-[11px] text-emerald-400 font-semibold truncate">
+                  <div className="text-[10px] sm:text-[11px] text-emerald-400 font-semibold truncate">
                     الصلاة القادمة {isToday ? '' : '(اليوم)'}: {next.nameAr}
                   </div>
                   <div className="text-xs sm:text-sm text-slate-200 font-bold truncate">
