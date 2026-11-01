@@ -22,13 +22,26 @@ export const TimeWindowsManager: React.FC = () => {
       const res = await fetch('/api/windows');
       if (res.ok) {
         const data = await res.json();
-        setWindows(data.windows || []);
+        if (!data.offline && data.windows) {
+          setWindows(data.windows);
+          try {
+            localStorage.setItem('cached_time_windows', JSON.stringify(data.windows));
+          } catch (e) {}
+          return;
+        }
       }
     } catch (e) {
-      console.error(e);
+      console.warn('Network error loading windows, checking offline cache:', e);
     } finally {
       setLoading(false);
     }
+
+    try {
+      const cached = localStorage.getItem('cached_time_windows');
+      if (cached) {
+        setWindows(JSON.parse(cached));
+      }
+    } catch (e) {}
   };
 
   useEffect(() => {

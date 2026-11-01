@@ -36,16 +36,34 @@ export const TrackingView: React.FC<TrackingViewProps> = () => {
       const res = await fetch(`/api/prayers/history?year=${year}&month=${month}`);
       if (res.ok) {
         const json = await res.json();
-        setData(json);
-        if (!selectedDateStr) {
-          setSelectedDateStr(json.todayStr);
+        if (!json.offline && json.todayStr) {
+          setData(json);
+          try {
+            localStorage.setItem(`cached_history_${year}_${month}`, JSON.stringify(json));
+          } catch (e) {}
+          if (!selectedDateStr) {
+            setSelectedDateStr(json.todayStr);
+          }
+          return;
         }
       }
     } catch (e) {
-      console.error('Failed to load prayer history:', e);
+      console.warn('Network error loading history, checking offline cache:', e);
     } finally {
       setLoading(false);
     }
+
+    // Offline fallback from cache
+    try {
+      const cached = localStorage.getItem(`cached_history_${year}_${month}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        setData(parsed);
+        if (!selectedDateStr && parsed.todayStr) {
+          setSelectedDateStr(parsed.todayStr);
+        }
+      }
+    } catch (e) {}
   };
 
   useEffect(() => {

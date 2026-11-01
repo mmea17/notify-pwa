@@ -1,6 +1,6 @@
-// Notify PWA Service Worker with Interactive Action Buttons
+// Notify PWA Service Worker with Offline Shell Caching & Interactive Push
 
-const CACHE_NAME = 'notify-pwa-v1';
+const CACHE_NAME = 'notify-pwa-v2';
 const STATIC_ASSETS = [
   '/',
   '/manifest.webmanifest',
@@ -37,7 +37,108 @@ self.addEventListener('activate', (event) => {
   return self.clients.claim();
 });
 
-// 3. Receive Push Notifications
+// 3. Intercept Fetch Requests (Offline Support & Caching)
+self.addEventListener('fetch', (event) => {
+  const request = event.request;
+  const url = new URL(request.url);
+
+  // Only handle GET requests for caching
+  if (request.method !== 'GET') {
+    return;
+  }
+
+  // A. Navigation Requests (e.g. visiting / or refreshing page) -> Network-First, Cache Fallback
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, responseClone);
+              cache.put('/', networkResponse.clone());
+            });
+          }
+          return networkResponse;
+        })
+        .catch(async () => {
+          const cache = await caches.open(CACHE_NAME);
+          const cachedResponse = await cache.match(request);
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          const rootCached = await cache.match('/');
+          if (rootCached) {
+            return rootCached;
+          }
+          return new Response('<h1>غير متصل بالإنترنت</h1>', {
+            headers: { 'Content-Type': 'text/html; charset=utf-8' }
+          });
+        })
+    );
+    return;
+  }
+
+  // B. Static Assets (_astro bundles, css, js, icons, images, manifest) -> Stale-While-Revalidate
+  const isStaticAsset =
+    url.pathname.startsWith('/_astro/') ||
+    url.pathname.startsWith('/icons/') ||
+    url.pathname === '/manifest.webmanifest' ||
+    url.pathname.endsWith('.js') ||
+    url.pathname.endsWith('.css') ||
+    url.pathname.endsWith('.svg') ||
+    url.pathname.endsWith('.png');
+
+  if (isStaticAsset) {
+    event.respondWith(
+      caches.match(request).then((cachedResponse) => {
+        const fetchPromise = fetch(request)
+          .then((networkResponse) => {
+            if (networkResponse && networkResponse.status === 200) {
+              const responseClone = networkResponse.clone();
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(request, responseClone);
+              });
+            }
+            return networkResponse;
+          })
+          .catch(() => cachedResponse);
+
+        return cachedResponse || fetchPromise;
+      })
+    );
+    return;
+  }
+
+  // C. API GET Requests (/api/*) -> Network-First, Cache Fallback
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, responseClone);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(async () => {
+          const cached = await caches.match(request);
+          if (cached) {
+            return cached;
+          }
+          return new Response(JSON.stringify({ error: 'offline', offline: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        })
+    );
+    return;
+  }
+});
+
+// 4. Receive Push Notifications
 self.addEventListener('push', (event) => {
   let payload = {
     title: 'تذكير جديد',

@@ -23,6 +23,45 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
   const [selectedDate, setSelectedDate] = useState<string>(
     initialPrayers?.selectedDateStr || initialPrayers?.todayStr || ''
   );
+  const [hasOfflineQueue, setHasOfflineQueue] = useState(false);
+
+  // Queue offline prayer toggle to localStorage
+  const queueOfflinePrayerAction = (prayer: string, status: string, date: string) => {
+    try {
+      const queue = JSON.parse(localStorage.getItem('offline_prayer_actions') || '[]');
+      const filtered = queue.filter((item: any) => !(item.prayer === prayer && item.date === date));
+      filtered.push({ prayer, status, date, timestamp: Date.now() });
+      localStorage.setItem('offline_prayer_actions', JSON.stringify(filtered));
+      setHasOfflineQueue(true);
+    } catch (e) {}
+  };
+
+  // Sync queued offline prayer actions with Cloudflare D1
+  const flushOfflineQueue = async () => {
+    try {
+      const rawQueue = localStorage.getItem('offline_prayer_actions');
+      if (!rawQueue) return;
+      const queue = JSON.parse(rawQueue);
+      if (!Array.isArray(queue) || queue.length === 0) return;
+
+      for (const item of queue) {
+        await fetch('/api/prayers/today', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prayer: item.prayer,
+            status: item.status,
+            date: item.date
+          })
+        });
+      }
+      localStorage.removeItem('offline_prayer_actions');
+      setHasOfflineQueue(false);
+      fetchPrayers(selectedDate);
+    } catch (e) {
+      console.warn('Failed to flush offline queue:', e);
+    }
+  };
 
   const fetchPrayers = async (dateStr?: string) => {
     const target = dateStr !== undefined ? dateStr : selectedDate;
@@ -32,25 +71,70 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
       const res = await fetch(url);
       if (res.ok) {
         const json = await res.json();
-        setData(json);
-        if (!selectedDate && json.selectedDateStr) {
-          setSelectedDate(json.selectedDateStr);
+        if (!json.offline && json.prayers) {
+          setData(json);
+          try {
+            localStorage.setItem('cached_prayers_' + (json.selectedDateStr || 'today'), JSON.stringify(json));
+            localStorage.setItem('last_active_prayers', JSON.stringify(json));
+          } catch (e) {}
+          if (!selectedDate && json.selectedDateStr) {
+            setSelectedDate(json.selectedDateStr);
+          }
+          return;
         }
       }
     } catch (err) {
-      console.error('Failed to fetch prayers:', err);
+      console.warn('Network error fetching prayers, checking offline cache:', err);
     } finally {
       setLoading(false);
       setDateLoading(false);
     }
+
+    // Offline cache fallback
+    try {
+      const cached = localStorage.getItem('cached_prayers_' + (target || 'today')) || localStorage.getItem('last_active_prayers');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        setData(parsed);
+        if (!selectedDate && parsed.selectedDateStr) {
+          setSelectedDate(parsed.selectedDateStr);
+        }
+      }
+    } catch (e) {}
   };
 
   useEffect(() => {
+    // Initial cache save
+    if (initialPrayers?.prayers) {
+      try {
+        localStorage.setItem('cached_prayers_' + (initialPrayers.selectedDateStr || 'today'), JSON.stringify(initialPrayers));
+        localStorage.setItem('last_active_prayers', JSON.stringify(initialPrayers));
+      } catch (e) {}
+    }
+
+    // Check existing offline queue
+    try {
+      const q = localStorage.getItem('offline_prayer_actions');
+      if (q && JSON.parse(q).length > 0) {
+        setHasOfflineQueue(true);
+      }
+    } catch (e) {}
+
     fetchPrayers();
+
+    // Auto-sync when internet reconnects
+    window.addEventListener('online', flushOfflineQueue);
+    if (navigator.onLine) {
+      flushOfflineQueue();
+    }
+
     const interval = setInterval(() => {
       fetchPrayers(selectedDate);
     }, 60000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('online', flushOfflineQueue);
+    };
   }, [selectedDate]);
 
   const changeDateByDays = (delta: number) => {
@@ -89,7 +173,31 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
       };
     });
 
+    // Save updated state to localStorage immediately for offline persistence
+    try {
+      const updated = {
+        ...data,
+        prayers: {
+          ...data?.prayers,
+          [prayerKey]: {
+            ...data?.prayers?.[prayerKey],
+            status: newStatus
+          }
+        }
+      };
+      localStorage.setItem('cached_prayers_' + (targetDate || 'today'), JSON.stringify(updated));
+      localStorage.setItem('last_active_prayers', JSON.stringify(updated));
+    } catch (e) {}
+
     setActionLoading(prayerKey);
+
+    // If device is offline, queue action locally and skip network
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      queueOfflinePrayerAction(prayerKey, newStatus, targetDate);
+      setActionLoading(null);
+      return;
+    }
+
     try {
       const res = await fetch('/api/prayers/today', {
         method: 'POST',
@@ -101,11 +209,11 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
         })
       });
       if (!res.ok) {
-        fetchPrayers(targetDate);
+        queueOfflinePrayerAction(prayerKey, newStatus, targetDate);
       }
     } catch (e) {
-      console.error(e);
-      fetchPrayers(targetDate);
+      console.warn('Network error toggling prayer, queued for sync:', e);
+      queueOfflinePrayerAction(prayerKey, newStatus, targetDate);
     } finally {
       setActionLoading(null);
     }
