@@ -169,25 +169,25 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
           )}
 
           {/* Bottom: Day Navigation Buttons & Gregorian / Hijri Dates */}
-          <div className="w-full flex items-center justify-between gap-2 bg-slate-950/70 border border-slate-800/90 p-1.5 rounded-2xl shadow-inner">
+          <div className="w-full flex items-center justify-between gap-1.5 sm:gap-2 bg-slate-950/70 border border-slate-800/90 p-1 sm:p-1.5 rounded-2xl shadow-inner">
             {/* Previous Day Button */}
             <button
               type="button"
               onClick={() => changeDateByDays(-1)}
               title="اليوم السابق"
-              className="px-2.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-emerald-500/20 hover:text-emerald-300 text-slate-300 transition-all border border-slate-700/60 flex items-center gap-1 active:scale-95 shrink-0"
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-800/80 hover:bg-emerald-500/20 hover:text-emerald-300 text-slate-300 transition-all border border-slate-700/60 flex items-center gap-1 active:scale-95 shrink-0"
             >
-              <ChevronRight className="w-4 h-4" />
-              <span className="text-xs font-medium">السابق</span>
+              <ChevronRight className="w-4 h-4 shrink-0" />
+              <span className="text-xs font-medium hidden sm:inline">السابق</span>
             </button>
 
             {/* Date Info Display (Gregorian & Hijri) */}
-            <div className="text-center px-1.5 flex-1 min-w-0">
-              <div className="flex items-center justify-center gap-1.5 text-xs sm:text-sm font-bold text-white">
+            <div className="text-center px-1 flex-1 min-w-0 overflow-hidden">
+              <div className="flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-sm font-bold text-white min-w-0">
                 <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span className="whitespace-nowrap">{gregorianFormatted || selectedDateStr}</span>
+                <span className="truncate sm:whitespace-nowrap">{gregorianFormatted || selectedDateStr}</span>
               </div>
-              <div className="text-[11px] text-emerald-400/90 font-medium mt-0.5 whitespace-nowrap">
+              <div className="text-[10px] sm:text-[11px] text-emerald-400/90 font-medium mt-0.5 truncate sm:whitespace-nowrap">
                 {hijriFormatted}
               </div>
             </div>
@@ -197,10 +197,10 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
               type="button"
               onClick={() => changeDateByDays(1)}
               title="اليوم التالي"
-              className="px-2.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-emerald-500/20 hover:text-emerald-300 text-slate-300 transition-all border border-slate-700/60 flex items-center gap-1 active:scale-95 shrink-0"
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-800/80 hover:bg-emerald-500/20 hover:text-emerald-300 text-slate-300 transition-all border border-slate-700/60 flex items-center gap-1 active:scale-95 shrink-0"
             >
-              <span className="text-xs font-medium">التالي</span>
-              <ChevronLeft className="w-4 h-4" />
+              <span className="text-xs font-medium hidden sm:inline">التالي</span>
+              <ChevronLeft className="w-4 h-4 shrink-0" />
             </button>
 
             {/* Today Button: Only rendered when viewing a different day, so on current day 'التالي' sits flush at the end */}
@@ -208,7 +208,7 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
               <button
                 type="button"
                 onClick={goToToday}
-                className="text-xs font-bold px-2.5 py-1.5 rounded-xl border bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/40 active:scale-95 shadow-sm shadow-emerald-500/20 whitespace-nowrap shrink-0 transition-all"
+                className="text-[11px] sm:text-xs font-bold px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl border bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/40 active:scale-95 shadow-sm shadow-emerald-500/20 whitespace-nowrap shrink-0 transition-all"
                 title="الرجوع إلى تاريخ اليوم"
               >
                 اليوم
