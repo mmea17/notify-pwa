@@ -110,73 +110,79 @@ async function handleCronTick(context: any) {
 
       if (pendingFollowUps.results && pendingFollowUps.results.length > 0) {
         for (const row of pendingFollowUps.results) {
-          const prayerKey = row.prayer as string;
-          const prayerName = PRAYER_NAMES[prayerKey] || prayerKey;
-          const logDate = row.date as string;
+          try {
+            const prayerKey = row.prayer as string;
+            const prayerName = PRAYER_NAMES[prayerKey] || prayerKey;
+            const logDate = row.date as string;
 
-          // Check if the prayer window has expired
-          let isExpired = false;
-          if (logDate < todayStr) {
-            // Prior day: only Isha can continue past midnight until today's Fajr
-            if (prayerKey !== 'isha' || nowTime >= dailyPrayers.fajr.timestamp) {
-              isExpired = true;
+            // Check if the prayer window has expired
+            let isExpired = false;
+            if (logDate < todayStr) {
+              // Prior day: only Isha can continue past midnight until today's Fajr
+              if (prayerKey !== 'isha' || nowTime >= dailyPrayers.fajr.timestamp) {
+                isExpired = true;
+              }
+            } else if (logDate === todayStr) {
+              const sunriseTs = dailyPrayers.sunrise?.timestamp;
+              if (prayerKey === 'fajr' && sunriseTs && nowTime >= sunriseTs) {
+                isExpired = true;
+              } else if (prayerKey === 'dhuhr' && nowTime >= dailyPrayers.asr.timestamp) {
+                isExpired = true;
+              } else if (prayerKey === 'asr' && nowTime >= dailyPrayers.maghrib.timestamp) {
+                isExpired = true;
+              } else if (prayerKey === 'maghrib' && nowTime >= dailyPrayers.isha.timestamp) {
+                isExpired = true;
+              }
+              // Today's Isha stays active throughout the night until tomorrow's Fajr
+            } else {
+              continue;
             }
-          } else if (logDate === todayStr) {
-            if (prayerKey === 'fajr' && nowTime >= dailyPrayers.shuruq.timestamp) {
-              isExpired = true;
-            } else if (prayerKey === 'dhuhr' && nowTime >= dailyPrayers.asr.timestamp) {
-              isExpired = true;
-            } else if (prayerKey === 'asr' && nowTime >= dailyPrayers.maghrib.timestamp) {
-              isExpired = true;
-            } else if (prayerKey === 'maghrib' && nowTime >= dailyPrayers.isha.timestamp) {
-              isExpired = true;
-            }
-            // Today's Isha stays active throughout the night until tomorrow's Fajr
-          } else {
-            continue;
-          }
 
-          if (isExpired) {
+            if (isExpired) {
+              await db.prepare(`
+                UPDATE prayers_log
+                SET next_reminder_at = NULL
+                WHERE id = ?
+              `).bind(row.id).run();
+              continue;
+            }
+
+            // Not expired: send follow-up reminder
+            const nextReminder = new Date(nowTime + snoozeMins * 60 * 1000).toISOString();
+            const currentSnoozeCount = Number(row.snooze_count ?? 0) + 1;
+
+            await sendPushToUser(db, env, userId, {
+              title: `⏰ تذكير متابعة: صلاة ${prayerName}`,
+              body: `مرت ${snoozeMins} دقيقة منذ التذكير السابق.. لا تدع الصلاة تفوتك! هل صليت الآن؟`,
+              icon: '/icons/icon-192.png',
+              badge: '/icons/icon-192.png',
+              tag: `prayer-${prayerKey}`,
+              data: {
+                type: 'prayer_snooze',
+                prayer: prayerKey,
+                prayerId: row.id,
+                userId: userId,
+                url: '/'
+              },
+              actions: [
+                { action: 'prayed', title: 'صليت ✅' },
+                { action: 'snooze_15', title: 'لسة (ذكرني بعد ربع ساعة) ⏰' }
+              ]
+            });
+
             await db.prepare(`
               UPDATE prayers_log
-              SET next_reminder_at = NULL
+              SET snooze_count = ?,
+                  reminded_post = 1,
+                  next_reminder_at = ?
               WHERE id = ?
-            `).bind(row.id).run();
-            continue;
+            `).bind(currentSnoozeCount, nextReminder, row.id).run();
+
+            notificationsDispatched++;
+            dispatchDetails.push({ user: user.name, type: 'prayer_snooze', prayer: prayerKey });
+          } catch (rowErr) {
+            console.error('Error processing follow-up row:', row.id, rowErr);
           }
-
-          // Not expired: send follow-up reminder
-          const nextReminder = new Date(nowTime + snoozeMins * 60 * 1000).toISOString();
-          const currentSnoozeCount = Number(row.snooze_count ?? 0) + 1;
-
-          await sendPushToUser(db, env, userId, {
-            title: `⏰ تذكير متابعة: صلاة ${prayerName}`,
-            body: `مرت ${snoozeMins} دقيقة منذ التذكير السابق.. لا تدع الصلاة تفوتك! هل صليت الآن؟`,
-            icon: '/icons/icon-192.png',
-            badge: '/icons/icon-192.png',
-            data: {
-              type: 'prayer_snooze',
-              prayer: prayerKey,
-              prayerId: row.id,
-              userId: userId,
-              url: '/'
-            },
-            actions: [
-              { action: 'prayed', title: 'صليت ✅' },
-              { action: 'snooze_15', title: 'لسة (ذكرني بعد ربع ساعة) ⏰' }
-            ]
-          });
-
-          await db.prepare(`
-            UPDATE prayers_log
-            SET snooze_count = ?,
-                reminded_post = 1,
-                next_reminder_at = ?
-            WHERE id = ?
-          `).bind(currentSnoozeCount, nextReminder, row.id).run();
-
-          notificationsDispatched++;
-          dispatchDetails.push({ user: user.name, type: 'prayer_snooze', prayer: prayerKey });
         }
       }
 
@@ -220,6 +226,7 @@ async function handleCronTick(context: any) {
               body: `باقي حوالي ${preMins} دقيقة على موعد أذان ${pInfo.nameAr} (${pInfo.timeFormatted}). استعد وتوضأ.`,
               icon: '/icons/icon-192.png',
               badge: '/icons/icon-192.png',
+              tag: `prayer-${pKey}`,
               data: {
                 type: 'prayer_pre',
                 prayer: pKey,
@@ -249,6 +256,7 @@ async function handleCronTick(context: any) {
               body: `الله أكبر.. حان الآن موعد أذان صلاة ${pInfo.nameAr} (${pInfo.timeFormatted}). حيّ على الصلاة.`,
               icon: '/icons/icon-192.png',
               badge: '/icons/icon-192.png',
+              tag: `prayer-${pKey}`,
               data: {
                 type: 'prayer_azan',
                 prayer: pKey,
@@ -287,6 +295,7 @@ async function handleCronTick(context: any) {
               body: `حان موعد صلاة ${pInfo.nameAr} (${pInfo.timeFormatted}). هل أديت الفريضة؟`,
               icon: '/icons/icon-192.png',
               badge: '/icons/icon-192.png',
+              tag: `prayer-${pKey}`,
               data: {
                 type: 'prayer_post',
                 prayer: pKey,

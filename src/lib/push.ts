@@ -66,7 +66,18 @@ export async function sendPushToSubscription(
       }
     };
 
-    const pushPayload = await buildPushPayload({ data: payload }, sub, vapid);
+    const pushPayload = await buildPushPayload(
+      {
+        data: payload,
+        options: {
+          ttl: 86400, // Keep in FCM queue for 24 hours so offline devices receive it upon reconnect
+          urgency: 'high',
+          ...(payload.tag && { topic: payload.tag })
+        }
+      },
+      sub,
+      vapid
+    );
     const res = await fetch(subscription.endpoint, {
       method: pushPayload.method,
       headers: pushPayload.headers,
