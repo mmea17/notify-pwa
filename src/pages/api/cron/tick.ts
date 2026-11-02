@@ -123,8 +123,7 @@ async function handleCronTick(context: any) {
                 isExpired = true;
               }
             } else if (logDate === todayStr) {
-              const sunriseTs = dailyPrayers.sunrise?.timestamp;
-              if (prayerKey === 'fajr' && sunriseTs && nowTime >= sunriseTs) {
+              if (prayerKey === 'fajr' && nowTime >= dailyPrayers.dhuhr.timestamp) {
                 isExpired = true;
               } else if (prayerKey === 'dhuhr' && nowTime >= dailyPrayers.asr.timestamp) {
                 isExpired = true;
