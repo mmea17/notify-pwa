@@ -5,6 +5,26 @@
     background-color: #0b1329;
     color: #f1f5f9;
     font-family: 'Cairo', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Disable text selection and callouts on mobile / touch devices for a native app feel */
+  @media (max-width: 768px), (pointer: coarse) {
+    body {
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+    }
+
+    /* Keep form fields selectable and editable */
+    input, textarea, [contenteditable="true"] {
+      -webkit-user-select: text;
+      -moz-user-select: text;
+      -ms-user-select: text;
+      user-select: text;
+    }
   }
 }
 
