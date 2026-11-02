@@ -98,3 +98,17 @@ CREATE TABLE IF NOT EXISTS app_config (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+-- Custom prayer reminders bank (sentences for before, at azan, and after prayer)
+CREATE TABLE IF NOT EXISTS prayer_messages (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  prayer TEXT NOT NULL,         -- 'fajr', 'dhuhr', 'asr', 'maghrib', 'isha'
+  timing TEXT NOT NULL,         -- 'pre', 'azan', 'post'
+  message_text TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_prayer_messages_user_lookup 
+ON prayer_messages(user_id, prayer, timing);
+

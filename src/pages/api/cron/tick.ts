@@ -150,9 +150,19 @@ async function handleCronTick(context: any) {
             const nextReminder = new Date(nowTime + snoozeMins * 60 * 1000).toISOString();
             const currentSnoozeCount = Number(row.snooze_count ?? 0) + 1;
 
+            let followUpBody = `مرت ${snoozeMins} دقيقة منذ التذكير السابق.. لا تدع الصلاة تفوتك! هل صليت الآن؟`;
+            try {
+              const customMsg = await db.prepare(
+                'SELECT message_text FROM prayer_messages WHERE user_id = ? AND prayer = ? AND timing = "post" ORDER BY RANDOM() LIMIT 1'
+              ).bind(userId, prayerKey).first();
+              if (customMsg && customMsg.message_text) {
+                followUpBody = customMsg.message_text as string;
+              }
+            } catch (e) {}
+
             await sendPushToUser(db, env, userId, {
               title: `⏰ تذكير متابعة: صلاة ${prayerName}`,
-              body: `مرت ${snoozeMins} دقيقة منذ التذكير السابق.. لا تدع الصلاة تفوتك! هل صليت الآن؟`,
+              body: followUpBody,
               icon: '/icons/icon-192.png',
               badge: '/icons/icon-192.png',
               tag: `prayer-${prayerKey}`,
@@ -220,9 +230,19 @@ async function handleCronTick(context: any) {
         if (nowTime >= preWarningTimestamp && nowTime < prayerTimestamp) {
           const remindedPre = log ? Number(log.reminded_pre ?? 0) : 0;
           if (!remindedPre) {
+            let preBody = `باقي حوالي ${preMins} دقيقة على موعد أذان ${pInfo.nameAr} (${pInfo.timeFormatted}). استعد وتوضأ.`;
+            try {
+              const customMsg = await db.prepare(
+                'SELECT message_text FROM prayer_messages WHERE user_id = ? AND prayer = ? AND timing = "pre" ORDER BY RANDOM() LIMIT 1'
+              ).bind(userId, pKey).first();
+              if (customMsg && customMsg.message_text) {
+                preBody = customMsg.message_text as string;
+              }
+            } catch (e) {}
+
             await sendPushToUser(db, env, userId, {
               title: `🕌 اقتربت صلاة ${pInfo.nameAr}`,
-              body: `باقي حوالي ${preMins} دقيقة على موعد أذان ${pInfo.nameAr} (${pInfo.timeFormatted}). استعد وتوضأ.`,
+              body: preBody,
               icon: '/icons/icon-192.png',
               badge: '/icons/icon-192.png',
               tag: `prayer-${pKey}`,
@@ -250,9 +270,19 @@ async function handleCronTick(context: any) {
           const status = log ? (log.status as string) : 'pending';
 
           if (!remindedAzan && status !== 'prayed') {
+            let azanBody = `الله أكبر.. حان الآن موعد أذان صلاة ${pInfo.nameAr} (${pInfo.timeFormatted}). حيّ على الصلاة.`;
+            try {
+              const customMsg = await db.prepare(
+                'SELECT message_text FROM prayer_messages WHERE user_id = ? AND prayer = ? AND timing = "azan" ORDER BY RANDOM() LIMIT 1'
+              ).bind(userId, pKey).first();
+              if (customMsg && customMsg.message_text) {
+                azanBody = customMsg.message_text as string;
+              }
+            } catch (e) {}
+
             await sendPushToUser(db, env, userId, {
               title: `🕌 حان الآن موعد أذان صلاة ${pInfo.nameAr}`,
-              body: `الله أكبر.. حان الآن موعد أذان صلاة ${pInfo.nameAr} (${pInfo.timeFormatted}). حيّ على الصلاة.`,
+              body: azanBody,
               icon: '/icons/icon-192.png',
               badge: '/icons/icon-192.png',
               tag: `prayer-${pKey}`,
@@ -289,9 +319,19 @@ async function handleCronTick(context: any) {
           const status = log ? (log.status as string) : 'pending';
 
           if (!remindedPost && !remindedAzan && status !== 'prayed') {
+            let postBody = `حان موعد صلاة ${pInfo.nameAr} (${pInfo.timeFormatted}). هل أديت الفريضة؟`;
+            try {
+              const customMsg = await db.prepare(
+                'SELECT message_text FROM prayer_messages WHERE user_id = ? AND prayer = ? AND timing = "post" ORDER BY RANDOM() LIMIT 1'
+              ).bind(userId, pKey).first();
+              if (customMsg && customMsg.message_text) {
+                postBody = customMsg.message_text as string;
+              }
+            } catch (e) {}
+
             await sendPushToUser(db, env, userId, {
               title: `🕌 حان موعد صلاة ${pInfo.nameAr}`,
-              body: `حان موعد صلاة ${pInfo.nameAr} (${pInfo.timeFormatted}). هل أديت الفريضة؟`,
+              body: postBody,
               icon: '/icons/icon-192.png',
               badge: '/icons/icon-192.png',
               tag: `prayer-${pKey}`,

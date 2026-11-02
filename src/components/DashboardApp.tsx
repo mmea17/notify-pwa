@@ -4,6 +4,7 @@ import { PushBanner } from './PushBanner';
 import { PrayerTracker } from './PrayerTracker';
 import { TrackingView } from './TrackingView';
 import { AthkarView } from './AthkarView';
+import { PrayerMessagesView } from './PrayerMessagesView';
 import { SettingsModal } from './SettingsModal';
 
 interface DashboardAppProps {
@@ -52,7 +53,7 @@ export const DashboardApp: React.FC<DashboardAppProps> = ({ user, settings: init
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '');
-      if (hash === 'tracking' || hash === 'athkar' || hash === 'home') {
+      if (hash === 'tracking' || hash === 'athkar' || hash === 'reminders' || hash === 'home') {
         setActiveTab(hash as ActiveTab);
       }
     };
@@ -137,6 +138,12 @@ export const DashboardApp: React.FC<DashboardAppProps> = ({ user, settings: init
         {activeTab === 'athkar' && (
           <div className="animate-fade-in">
             <AthkarView key={`athkar-${refreshKey}`} refreshKey={refreshKey} />
+          </div>
+        )}
+
+        {activeTab === 'reminders' && (
+          <div className="animate-fade-in">
+            <PrayerMessagesView key={`reminders-${refreshKey}`} />
           </div>
         )}
       </main>

@@ -8,11 +8,12 @@ import {
   CheckCircle,
   Home,
   Flame,
-  Sparkles
+  Sparkles,
+  MessageSquareQuote
 } from 'lucide-react';
 import { getSubscriptionStatus, subscribeUserToPush } from '@/lib/push-client';
 
-export type ActiveTab = 'home' | 'tracking' | 'athkar';
+export type ActiveTab = 'home' | 'tracking' | 'athkar' | 'reminders';
 
 interface HeaderProps {
   user: { id: string; name: string; email: string };
@@ -73,7 +74,8 @@ export const Header: React.FC<HeaderProps> = ({
   const NAV_ITEMS: Array<{ id: ActiveTab; label: string; icon: any; badge?: string }> = [
     { id: 'home', label: 'الرئيسية', icon: Home },
     { id: 'tracking', label: 'المتابعة', icon: Flame },
-    { id: 'athkar', label: 'الأذكار', icon: Sparkles }
+    { id: 'athkar', label: 'الأذكار', icon: Sparkles },
+    { id: 'reminders', label: 'التذكيرات', icon: MessageSquareQuote }
   ];
 
   return (
