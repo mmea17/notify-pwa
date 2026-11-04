@@ -1,6 +1,6 @@
 // Notify PWA Service Worker with Fast Offline Shell Caching & Interactive Push
 
-const CACHE_NAME = 'notify-pwa-v10';
+const CACHE_NAME = 'notify-pwa-v11';
 const STATIC_ASSETS = [
   '/',
   '/manifest.webmanifest',

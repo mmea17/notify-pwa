@@ -385,62 +385,101 @@ async function handleCronTick(context: any) {
               'SELECT * FROM message_pools WHERE window_id = ? AND user_id = ?'
             ).bind(win.id, userId).all();
 
-            if (poolMessages.results && poolMessages.results.length > 0) {
-              const mode = win.mode as string;
-              let shouldSend = false;
+            const mode = (win.mode as string) || 'interval';
+            let shouldSend = false;
 
-              if (mode === 'fixed' && win.fixed_time === currentHHMM) {
+            if (mode === 'fixed' && win.fixed_time === currentHHMM) {
+              const lastSentRow = await db.prepare(
+                'SELECT MAX(last_sent_at) as last_sent FROM message_pools WHERE window_id = ?'
+              ).bind(win.id).first();
+              const lastSentStr = (win.last_sent_at as string) || (lastSentRow?.last_sent as string);
+              const hasSentToday = lastSentStr && lastSentStr.startsWith(todayStr);
+              if (!hasSentToday) {
                 shouldSend = true;
-              } else if (mode === 'interval') {
-                const interval = Number(win.interval_mins ?? 60);
-                const lastSentRow = await db.prepare(
-                  'SELECT MAX(last_sent_at) as last_sent FROM message_pools WHERE window_id = ?'
-                ).bind(win.id).first();
-                if (!lastSentRow?.last_sent) {
+              }
+            } else {
+              // Interval repetition throughout the window (both 'interval' and legacy 'random')
+              const interval = Math.max(5, Number(win.interval_mins || 60));
+
+              const lastSentRow = await db.prepare(
+                'SELECT MAX(last_sent_at) as last_sent FROM message_pools WHERE window_id = ?'
+              ).bind(win.id).first();
+              const lastSentStr = (win.last_sent_at as string) || (lastSentRow?.last_sent as string);
+
+              if (!lastSentStr) {
+                shouldSend = true;
+              } else {
+                let parsedTime = Date.parse(lastSentStr);
+                if (isNaN(parsedTime) || !lastSentStr.includes('T')) {
+                  parsedTime = Date.parse(lastSentStr.replace(' ', 'T') + 'Z');
+                }
+                if (isNaN(parsedTime)) {
+                  parsedTime = new Date(lastSentStr).getTime();
+                }
+
+                const elapsedMs = nowTime - parsedTime;
+                // Allow a small 30-second leeway for cron tick jitter
+                const intervalMs = (interval * 60 - 30) * 1000;
+
+                if (elapsedMs >= intervalMs) {
                   shouldSend = true;
+                }
+              }
+            }
+
+            if (shouldSend) {
+              const msgs = poolMessages.results || [];
+              let chosenMsgText = `تذكير ${win.name}: حان وقت ذكر الله وتجديد النية ومواصلة التركيز في أهدافك ✨`;
+              let chosenMsgId: string | null = null;
+
+              if (msgs.length > 0) {
+                if (msgs.length === 1) {
+                  chosenMsgText = msgs[0].message_text as string;
+                  chosenMsgId = msgs[0].id as string;
                 } else {
-                  const lastSentTime = new Date(lastSentRow.last_sent as string).getTime();
-                  if (nowTime - lastSentTime >= interval * 60 * 1000) {
-                    shouldSend = true;
-                  }
-                }
-              } else if (mode === 'random') {
-                const lastSentRow = await db.prepare(
-                  'SELECT MAX(last_sent_at) as last_sent FROM message_pools WHERE window_id = ?'
-                ).bind(win.id).first();
-
-                const hasSentToday = lastSentRow?.last_sent && (lastSentRow.last_sent as string).startsWith(todayStr);
-                if (!hasSentToday) {
-                  shouldSend = true;
+                  // Pick randomly from messages, avoiding immediate repetition of the last sent one if possible
+                  const sorted = [...msgs].sort((a: any, b: any) => {
+                    const tA = a.last_sent_at ? new Date(a.last_sent_at).getTime() : 0;
+                    const tB = b.last_sent_at ? new Date(b.last_sent_at).getTime() : 0;
+                    return tA - tB;
+                  });
+                  const candidates = sorted.slice(0, msgs.length - 1);
+                  const randIdx = Math.floor(Math.random() * candidates.length);
+                  chosenMsgText = candidates[randIdx].message_text as string;
+                  chosenMsgId = candidates[randIdx].id as string;
                 }
               }
 
-              if (shouldSend) {
-                const randomIndex = Math.floor(Math.random() * poolMessages.results.length);
-                const chosenMsg = poolMessages.results[randomIndex];
-
-                await db.prepare('UPDATE message_pools SET last_sent_at = CURRENT_TIMESTAMP WHERE id = ?').bind(chosenMsg.id).run();
-
-                await sendPushToUser(db, env, userId, {
-                  title: `${win.name} 🎯`,
-                  body: chosenMsg.message_text as string,
-                  icon: '/icons/icon-192.png',
-                  badge: '/icons/icon-192.png',
-                  data: {
-                    type: 'window_message',
-                    windowId: win.id,
-                    messageId: chosenMsg.id,
-                    url: '/'
-                  },
-                  actions: [
-                    { action: 'focused', title: 'مستمر بتركيز 💪' },
-                    { action: 'done', title: 'تم وأنجزت 🎉' }
-                  ]
-                });
-
-                notificationsDispatched++;
-                dispatchDetails.push({ user: user.name, type: 'window_message', window: win.name });
+              const nowIsoStr = new Date().toISOString();
+              const updateBatch: any[] = [
+                db.prepare('UPDATE time_windows SET last_sent_at = ? WHERE id = ?').bind(nowIsoStr, win.id)
+              ];
+              if (chosenMsgId) {
+                updateBatch.push(
+                  db.prepare('UPDATE message_pools SET last_sent_at = ? WHERE id = ?').bind(nowIsoStr, chosenMsgId)
+                );
               }
+              await db.batch(updateBatch);
+
+              await sendPushToUser(db, env, userId, {
+                title: `${win.name} 🎯`,
+                body: chosenMsgText,
+                icon: '/icons/icon-192.png',
+                badge: '/icons/icon-192.png',
+                data: {
+                  type: 'window_message',
+                  windowId: win.id,
+                  messageId: chosenMsgId || 'default',
+                  url: '/'
+                },
+                actions: [
+                  { action: 'focused', title: 'مستمر بتركيز 💪' },
+                  { action: 'done', title: 'تم وأنجزت 🎉' }
+                ]
+              });
+
+              notificationsDispatched++;
+              dispatchDetails.push({ user: user.name, type: 'window_message', window: win.name });
             }
           }
         }

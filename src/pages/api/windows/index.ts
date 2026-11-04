@@ -65,9 +65,9 @@ export const POST: APIRoute = async (context) => {
       icon || 'Clock',
       start_time,
       end_time,
-      mode || 'random',
+      mode || 'interval',
       fixed_time || null,
-      interval_mins || 60
+      Number(interval_mins) || 60
     ).run();
 
     return new Response(JSON.stringify({ success: true, id }), {

@@ -67,9 +67,10 @@ CREATE TABLE IF NOT EXISTS time_windows (
   icon TEXT DEFAULT 'Clock',
   start_time TEXT NOT NULL,
   end_time TEXT NOT NULL,
-  mode TEXT DEFAULT 'random',
+  mode TEXT DEFAULT 'interval',
   fixed_time TEXT,
   interval_mins INTEGER DEFAULT 60,
+  last_sent_at TEXT,
   is_active INTEGER DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
