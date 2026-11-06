@@ -110,10 +110,15 @@ export const POST: APIRoute = async (context) => {
         `).bind(logId, userId, routineId, todayStr).run();
 
         const histId = 'hist-' + Date.now();
+        const isHabit = data?.routineType === 'habit';
+        const actionTitle = isHabit ? 'تأكيد إنجاز العادة' : 'تأكيد إنجاز الورد';
+        const actionDesc = isHabit
+          ? `تم تأكيد إنجاز عادة ${data?.routineName || ''}`
+          : `تم تأكيد قراءة ${data?.routineName || 'الورد'}`;
         await db.prepare(`
           INSERT INTO notifications_history (id, user_id, type, title, body, action_taken)
-          VALUES (?, ?, 'routine_response', 'تأكيد إنجاز الورد', ?, 'completed')
-        `).bind(histId, userId, `تم تأكيد قراءة ${data?.routineName || 'الورد'}`).run();
+          VALUES (?, ?, 'routine_response', ?, ?, 'completed')
+        `).bind(histId, userId, actionTitle, actionDesc).run();
       }
       return new Response(JSON.stringify({ success: true, status: 'completed' }), { status: 200 });
     }

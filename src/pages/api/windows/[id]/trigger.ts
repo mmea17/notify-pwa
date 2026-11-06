@@ -31,21 +31,36 @@ export const POST: APIRoute = async (context) => {
     // Update last_sent_at
     await db.prepare('UPDATE message_pools SET last_sent_at = CURRENT_TIMESTAMP WHERE id = ?').bind(chosenMsg.id).run();
 
+    const isHabit = window.routine_type === 'habit';
+    const isAthkar = window.routine_type === 'athkar' || window.routine_type === 'trackable';
+    const isTrackable = window.routine_type !== 'continuous';
+
     const payload = {
-      title: `${window.name} ✨`,
+      title: isHabit ? `${window.name} 🎯` : (isAthkar ? `${window.name} 📿` : `${window.name} ⏱️`),
       body: chosenMsg.message_text as string,
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
       data: {
-        type: 'window_message',
-        windowId: window.id,
+        type: isTrackable ? 'routine_trackable' : 'window_message',
+        routineType: isHabit ? 'habit' : (isAthkar ? 'athkar' : 'continuous'),
+        routineId: window.id,
+        routineName: window.name,
         messageId: chosenMsg.id,
-        url: '/'
+        url: '/#athkar'
       },
-      actions: [
-        { action: 'focused', title: 'مستمر بتركيز 💪' },
-        { action: 'done', title: 'تم وأنجزت 🎉' }
-      ]
+      actions: isHabit
+        ? [
+            { action: 'routine_done', title: 'أنجزت ✅' },
+            { action: 'routine_snooze', title: 'لسة (ذكرني بعد ربع ساعة) ⏰' }
+          ]
+        : isAthkar
+        ? [
+            { action: 'routine_done', title: 'قرأت ✅' },
+            { action: 'routine_snooze', title: 'لسة (ذكرني بعد ربع ساعة) ⏰' }
+          ]
+        : [
+            { action: 'focused', title: 'مستمر بتركيز 💪' }
+          ]
     };
 
     const result = await sendPushToUser(db, env, session.user.id, payload);

@@ -1,6 +1,6 @@
 // Notify PWA Service Worker with Fast Offline Shell Caching & Interactive Push
 
-const CACHE_NAME = 'notify-pwa-v13';
+const CACHE_NAME = 'notify-pwa-v14';
 const STATIC_ASSETS = [
   '/',
   '/manifest.webmanifest',
@@ -240,8 +240,13 @@ self.addEventListener('notificationclick', (event) => {
             feedbackTitle = 'تقبل الله طاعتكم! 🤲';
             feedbackBody = 'تم تسجيل أداء الصلاة بنجاح، لن نذكرك بها مجدداً اليوم.';
           } else if (action === 'routine_done') {
-            feedbackTitle = 'تقبل الله طاعتكم! 📿';
-            feedbackBody = 'تم تسجيل القراءة بنجاح، ولن نذكرك بها مجدداً اليوم.';
+            if (data && data.routineType === 'habit') {
+              feedbackTitle = 'ألف مبروك الإنجاز! 🏆';
+              feedbackBody = 'تم تسجيل إنجاز العادة بنجاح، استمر في التقدم!';
+            } else {
+              feedbackTitle = 'تقبل الله طاعتكم! 📿';
+              feedbackBody = 'تم تسجيل القراءة بنجاح، ولن نذكرك بها مجدداً اليوم.';
+            }
           } else if (action === 'routine_snooze') {
             feedbackTitle = 'تم تأجيل التذكير ⏰';
             feedbackBody = 'سنذكرك بها مجدداً بعد ربع ساعة إن شاء الله.';

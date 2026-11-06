@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS time_windows (
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   icon TEXT DEFAULT 'Clock',
-  routine_type TEXT DEFAULT 'trackable', -- 'trackable' (أوراد بمتابعة وإنجاز) | 'continuous' (تذكيرات مستمرة ومحاربة تشتت)
+  routine_type TEXT DEFAULT 'athkar', -- 'athkar' (أوراد وعبادات دينية) | 'habit' (عادات ومهام يومية) | 'continuous' (فترات تركيز مستمرة)
   timing_type TEXT DEFAULT 'prayer_relative', -- 'prayer_relative' (مرتبط بالصلاة ديناميكياً) | 'fixed_time' (ساعات محددة)
   start_time TEXT NOT NULL,
   end_time TEXT NOT NULL,

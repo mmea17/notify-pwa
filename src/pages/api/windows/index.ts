@@ -106,7 +106,7 @@ export const POST: APIRoute = async (context) => {
       session.user.id,
       name,
       icon || 'Clock',
-      routine_type || 'trackable',
+      routine_type || 'athkar',
       timing_type || 'prayer_relative',
       start_prayer || null,
       Number(start_offset_mins) || 0,

@@ -494,8 +494,12 @@ async function handleCronTick(context: any) {
             }
 
             if (shouldSend) {
+              const isHabit = (win.routine_type as string) === 'habit';
+              const isAthkar = (win.routine_type as string) === 'athkar' || (win.routine_type as string) === 'trackable';
               const msgs = poolMessages.results || [];
-              let chosenMsgText = isTrackable
+              let chosenMsgText = isHabit
+                ? `حان وقت ${win.name} 🎯.. خطوة يومية نحو هدفك، هل أنجزت اليوم؟`
+                : isAthkar
                 ? `حان موعد ${win.name} 📿.. تذكّر قراءتها لتنال الأجر والسكينة والحفظ.`
                 : `تذكير ${win.name}: حان وقت ذكر الله وتجديد النية ومواصلة التركيز في أهدافك ✨`;
               let chosenMsgId: string | null = null;
@@ -547,19 +551,25 @@ async function handleCronTick(context: any) {
               await db.batch(updateBatch);
 
               const pushPayload: any = {
-                title: isTrackable ? `${win.name} 📿` : `${win.name} 🎯`,
+                title: isHabit ? `${win.name} 🎯` : (isAthkar ? `${win.name} 📿` : `${win.name} ⏱️`),
                 body: chosenMsgText,
                 icon: '/icons/icon-192.png',
                 badge: '/icons/icon-192.png',
                 tag: `window-${win.id}`,
                 data: {
                   type: isTrackable ? 'routine_trackable' : 'window_message',
+                  routineType: isHabit ? 'habit' : (isAthkar ? 'athkar' : 'continuous'),
                   routineId: win.id,
                   routineName: win.name,
                   messageId: chosenMsgId || 'default',
                   url: '/#athkar'
                 },
-                actions: isTrackable
+                actions: isHabit
+                  ? [
+                      { action: 'routine_done', title: 'أنجزت ✅' },
+                      { action: 'routine_snooze', title: 'لسة (ذكرني بعد ربع ساعة) ⏰' }
+                    ]
+                  : isAthkar
                   ? [
                       { action: 'routine_done', title: 'قرأت ✅' },
                       { action: 'routine_snooze', title: 'لسة (ذكرني بعد ربع ساعة) ⏰' }
