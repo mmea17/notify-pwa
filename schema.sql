@@ -65,8 +65,15 @@ CREATE TABLE IF NOT EXISTS time_windows (
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   icon TEXT DEFAULT 'Clock',
+  routine_type TEXT DEFAULT 'trackable', -- 'trackable' (أوراد بمتابعة وإنجاز) | 'continuous' (تذكيرات مستمرة ومحاربة تشتت)
+  timing_type TEXT DEFAULT 'prayer_relative', -- 'prayer_relative' (مرتبط بالصلاة ديناميكياً) | 'fixed_time' (ساعات محددة)
   start_time TEXT NOT NULL,
   end_time TEXT NOT NULL,
+  start_prayer TEXT, -- 'fajr', 'sunrise', 'dhuhr', 'asr', 'maghrib', 'isha'
+  start_offset_mins INTEGER DEFAULT 0,
+  end_prayer TEXT,
+  end_offset_mins INTEGER DEFAULT 0,
+  end_fixed_time TEXT,
   mode TEXT DEFAULT 'interval',
   fixed_time TEXT,
   interval_mins INTEGER DEFAULT 60,
@@ -74,6 +81,20 @@ CREATE TABLE IF NOT EXISTS time_windows (
   is_active INTEGER DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS routines_log (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  routine_id TEXT NOT NULL REFERENCES time_windows(id) ON DELETE CASCADE,
+  date TEXT NOT NULL,
+  status TEXT DEFAULT 'pending', -- 'pending', 'completed', 'snoozed'
+  completed_at DATETIME,
+  reminded_count INTEGER DEFAULT 0,
+  next_reminder_at TEXT,
+  last_reminded_at TEXT,
+  UNIQUE(user_id, routine_id, date)
+);
+CREATE INDEX IF NOT EXISTS idx_routines_log_lookup ON routines_log(user_id, date, status);
 
 CREATE TABLE IF NOT EXISTS message_pools (
   id TEXT PRIMARY KEY,

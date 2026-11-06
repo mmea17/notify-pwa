@@ -96,6 +96,47 @@ export const POST: APIRoute = async (context) => {
       return new Response(JSON.stringify({ success: true, status: 'snoozed', nextReminder: nextTime }), { status: 200 });
     }
 
+    if (action === 'routine_done') {
+      const routineId = data?.routineId;
+      if (routineId) {
+        const logId = `rotlog-${userId}-${todayStr}-${routineId}`;
+        await db.prepare(`
+          INSERT INTO routines_log (id, user_id, routine_id, date, status, completed_at, next_reminder_at)
+          VALUES (?, ?, ?, ?, 'completed', CURRENT_TIMESTAMP, NULL)
+          ON CONFLICT(user_id, routine_id, date) DO UPDATE SET
+            status = 'completed',
+            completed_at = CURRENT_TIMESTAMP,
+            next_reminder_at = NULL
+        `).bind(logId, userId, routineId, todayStr).run();
+
+        const histId = 'hist-' + Date.now();
+        await db.prepare(`
+          INSERT INTO notifications_history (id, user_id, type, title, body, action_taken)
+          VALUES (?, ?, 'routine_response', 'تأكيد إنجاز الورد', ?, 'completed')
+        `).bind(histId, userId, `تم تأكيد قراءة ${data?.routineName || 'الورد'}`).run();
+      }
+      return new Response(JSON.stringify({ success: true, status: 'completed' }), { status: 200 });
+    }
+
+    if (action === 'routine_snooze') {
+      const routineId = data?.routineId;
+      if (routineId) {
+        const snoozeMinutes = 15;
+        const nextTime = new Date(Date.now() + snoozeMinutes * 60 * 1000).toISOString();
+        const logId = `rotlog-${userId}-${todayStr}-${routineId}`;
+
+        await db.prepare(`
+          INSERT INTO routines_log (id, user_id, routine_id, date, status, reminded_count, next_reminder_at)
+          VALUES (?, ?, ?, ?, 'snoozed', 1, ?)
+          ON CONFLICT(user_id, routine_id, date) DO UPDATE SET
+            status = 'snoozed',
+            reminded_count = routines_log.reminded_count + 1,
+            next_reminder_at = ?
+        `).bind(logId, userId, routineId, todayStr, nextTime, nextTime).run();
+      }
+      return new Response(JSON.stringify({ success: true, status: 'snoozed' }), { status: 200 });
+    }
+
     if (action === 'focused' || action === 'done') {
       const histId = 'hist-' + Date.now();
       await db.prepare(`

@@ -362,49 +362,117 @@ async function handleCronTick(context: any) {
       }
 
       // ========================================================
-      // 3. CHECK DAILY TIME WINDOWS (LOCAL TIME)
+      // 3. CHECK DAILY TIME WINDOWS & ROUTINES (ATHKAR / FOCUS)
       // ========================================================
       const userWindows = await db.prepare(
         'SELECT * FROM time_windows WHERE user_id = ? AND is_active = 1'
       ).bind(userId).all();
 
       if (userWindows.results && userWindows.results.length > 0) {
+        // Helper to get prayer timestamp for relative timing
+        const getPrayerTimestamp = (pName?: string | null): number | null => {
+          if (!pName) return null;
+          if (pName === 'sunrise') return dailyPrayers.sunrise?.timestamp || null;
+          const p = (dailyPrayers as any)[pName];
+          return p ? p.timestamp : null;
+        };
+
         for (const win of userWindows.results) {
-          const startTime = (win.start_time as string).trim();
-          const endTime = (win.end_time as string).trim();
+          try {
+            const isPrayerRelative = win.timing_type === 'prayer_relative' && !!win.start_prayer;
+            let isInside = false;
 
-          let isInside = false;
-          if (startTime <= endTime) {
-            isInside = currentHHMM >= startTime && currentHHMM <= endTime;
-          } else {
-            isInside = currentHHMM >= startTime || currentHHMM <= endTime;
-          }
+            if (isPrayerRelative) {
+              const startPrayerTs = getPrayerTimestamp(win.start_prayer as string);
+              if (startPrayerTs) {
+                const windowStartTs = startPrayerTs + Number(win.start_offset_mins || 0) * 60 * 1000;
+                let windowEndTs: number | null = null;
 
-          if (isInside) {
+                if (win.end_prayer) {
+                  const endPrayerTs = getPrayerTimestamp(win.end_prayer as string);
+                  if (endPrayerTs) {
+                    windowEndTs = endPrayerTs + Number(win.end_offset_mins || 0) * 60 * 1000;
+                  }
+                }
+
+                if (windowEndTs) {
+                  isInside = nowTime >= windowStartTs && nowTime <= windowEndTs;
+                } else if (win.end_fixed_time) {
+                  const endFixedTime = (win.end_fixed_time as string).trim();
+                  isInside = nowTime >= windowStartTs && currentHHMM <= endFixedTime;
+                } else {
+                  // Fallback: window ends at Isha
+                  const ishaTs = dailyPrayers.isha?.timestamp;
+                  isInside = nowTime >= windowStartTs && (!ishaTs || nowTime <= ishaTs);
+                }
+              }
+            } else {
+              // Fixed clock hours
+              const startTime = (win.start_time as string || '09:00').trim();
+              const endTime = (win.end_time as string || '17:00').trim();
+
+              if (startTime <= endTime) {
+                isInside = currentHHMM >= startTime && currentHHMM <= endTime;
+              } else {
+                isInside = currentHHMM >= startTime || currentHHMM <= endTime;
+              }
+            }
+
+            if (!isInside) {
+              continue;
+            }
+
             const poolMessages = await db.prepare(
               'SELECT * FROM message_pools WHERE window_id = ? AND user_id = ?'
             ).bind(win.id, userId).all();
 
-            const mode = (win.mode as string) || 'interval';
+            const isTrackable = (win.routine_type as string) !== 'continuous';
             let shouldSend = false;
+            let routineLog: any = null;
 
-            if (mode === 'fixed' && win.fixed_time === currentHHMM) {
-              const lastSentRow = await db.prepare(
-                'SELECT MAX(last_sent_at) as last_sent FROM message_pools WHERE window_id = ?'
-              ).bind(win.id).first();
-              const lastSentStr = (win.last_sent_at as string) || (lastSentRow?.last_sent as string);
-              const hasSentToday = lastSentStr && lastSentStr.startsWith(todayStr);
-              if (!hasSentToday) {
+            if (isTrackable) {
+              // Check today's completion status in routines_log
+              routineLog = await db.prepare(
+                'SELECT * FROM routines_log WHERE user_id = ? AND routine_id = ? AND date = ?'
+              ).bind(userId, win.id, todayStr).first();
+
+              // If already completed today, STOP sending completely!
+              if (routineLog && routineLog.status === 'completed') {
+                continue;
+              }
+
+              // If snoozed, check if snooze window has elapsed
+              if (routineLog && routineLog.status === 'snoozed' && routineLog.next_reminder_at) {
+                if (nowIso < (routineLog.next_reminder_at as string)) {
+                  continue; // still snoozing
+                }
+              }
+
+              // Check interval
+              const interval = Math.max(5, Number(win.interval_mins || 30));
+              const lastRemindedStr = routineLog?.last_reminded_at || (win.last_sent_at as string);
+
+              if (!lastRemindedStr) {
                 shouldSend = true;
+              } else {
+                let parsedTime = Date.parse(lastRemindedStr);
+                if (isNaN(parsedTime) || !lastRemindedStr.includes('T')) {
+                  parsedTime = Date.parse(lastRemindedStr.replace(' ', 'T') + 'Z');
+                }
+                if (isNaN(parsedTime)) {
+                  parsedTime = new Date(lastRemindedStr).getTime();
+                }
+
+                const elapsedMs = nowTime - parsedTime;
+                const intervalMs = (interval * 60 - 30) * 1000;
+                if (elapsedMs >= intervalMs) {
+                  shouldSend = true;
+                }
               }
             } else {
-              // Interval repetition throughout the window (both 'interval' and legacy 'random')
+              // Continuous awareness / focus reminders
               const interval = Math.max(5, Number(win.interval_mins || 60));
-
-              const lastSentRow = await db.prepare(
-                'SELECT MAX(last_sent_at) as last_sent FROM message_pools WHERE window_id = ?'
-              ).bind(win.id).first();
-              const lastSentStr = (win.last_sent_at as string) || (lastSentRow?.last_sent as string);
+              const lastSentStr = (win.last_sent_at as string);
 
               if (!lastSentStr) {
                 shouldSend = true;
@@ -418,9 +486,7 @@ async function handleCronTick(context: any) {
                 }
 
                 const elapsedMs = nowTime - parsedTime;
-                // Allow a small 30-second leeway for cron tick jitter
                 const intervalMs = (interval * 60 - 30) * 1000;
-
                 if (elapsedMs >= intervalMs) {
                   shouldSend = true;
                 }
@@ -429,7 +495,9 @@ async function handleCronTick(context: any) {
 
             if (shouldSend) {
               const msgs = poolMessages.results || [];
-              let chosenMsgText = `تذكير ${win.name}: حان وقت ذكر الله وتجديد النية ومواصلة التركيز في أهدافك ✨`;
+              let chosenMsgText = isTrackable
+                ? `حان موعد ${win.name} 📿.. تذكّر قراءتها لتنال الأجر والسكينة والحفظ.`
+                : `تذكير ${win.name}: حان وقت ذكر الله وتجديد النية ومواصلة التركيز في أهدافك ✨`;
               let chosenMsgId: string | null = null;
 
               if (msgs.length > 0) {
@@ -437,7 +505,6 @@ async function handleCronTick(context: any) {
                   chosenMsgText = msgs[0].message_text as string;
                   chosenMsgId = msgs[0].id as string;
                 } else {
-                  // Pick randomly from messages, avoiding immediate repetition of the last sent one if possible
                   const sorted = [...msgs].sort((a: any, b: any) => {
                     const tA = a.last_sent_at ? new Date(a.last_sent_at).getTime() : 0;
                     const tB = b.last_sent_at ? new Date(b.last_sent_at).getTime() : 0;
@@ -451,6 +518,9 @@ async function handleCronTick(context: any) {
               }
 
               const nowIsoStr = new Date().toISOString();
+              const intervalMins = Number(win.interval_mins || (isTrackable ? 30 : 60));
+              const nextReminderIso = new Date(nowTime + intervalMins * 60 * 1000).toISOString();
+
               const updateBatch: any[] = [
                 db.prepare('UPDATE time_windows SET last_sent_at = ? WHERE id = ?').bind(nowIsoStr, win.id)
               ];
@@ -459,28 +529,53 @@ async function handleCronTick(context: any) {
                   db.prepare('UPDATE message_pools SET last_sent_at = ? WHERE id = ?').bind(nowIsoStr, chosenMsgId)
                 );
               }
+
+              if (isTrackable) {
+                const rotLogId = routineLog?.id || `rotlog-${userId}-${todayStr}-${win.id}`;
+                updateBatch.push(
+                  db.prepare(`
+                    INSERT INTO routines_log (id, user_id, routine_id, date, status, reminded_count, last_reminded_at, next_reminder_at)
+                    VALUES (?, ?, ?, ?, 'pending', 1, ?, ?)
+                    ON CONFLICT(user_id, routine_id, date) DO UPDATE SET
+                      reminded_count = routines_log.reminded_count + 1,
+                      last_reminded_at = ?,
+                      next_reminder_at = ?
+                  `).bind(rotLogId, userId, win.id, todayStr, nowIsoStr, nextReminderIso, nowIsoStr, nextReminderIso)
+                );
+              }
+
               await db.batch(updateBatch);
 
-              await sendPushToUser(db, env, userId, {
-                title: `${win.name} 🎯`,
+              const pushPayload: any = {
+                title: isTrackable ? `${win.name} 📿` : `${win.name} 🎯`,
                 body: chosenMsgText,
                 icon: '/icons/icon-192.png',
                 badge: '/icons/icon-192.png',
+                tag: `window-${win.id}`,
                 data: {
-                  type: 'window_message',
-                  windowId: win.id,
+                  type: isTrackable ? 'routine_trackable' : 'window_message',
+                  routineId: win.id,
+                  routineName: win.name,
                   messageId: chosenMsgId || 'default',
-                  url: '/'
+                  url: '/#athkar'
                 },
-                actions: [
-                  { action: 'focused', title: 'مستمر بتركيز 💪' },
-                  { action: 'done', title: 'تم وأنجزت 🎉' }
-                ]
-              });
+                actions: isTrackable
+                  ? [
+                      { action: 'routine_done', title: 'قرأت ✅' },
+                      { action: 'routine_snooze', title: 'لسة (ذكرني بعد ربع ساعة) ⏰' }
+                    ]
+                  : [
+                      { action: 'focused', title: 'مستمر بتركيز 💪' }
+                    ]
+              };
+
+              await sendPushToUser(db, env, userId, pushPayload);
 
               notificationsDispatched++;
-              dispatchDetails.push({ user: user.name, type: 'window_message', window: win.name });
+              dispatchDetails.push({ user: user.name, type: isTrackable ? 'routine_trackable' : 'window_message', window: win.name });
             }
+          } catch (winErr) {
+            console.error('Error processing time window/routine:', win.id, winErr);
           }
         }
       }
