@@ -21,9 +21,8 @@ import {
   Briefcase,
   CheckCircle2,
   Undo2,
-  Flame,
-  Sun,
-  Moon
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 const INTERVAL_OPTIONS = [
@@ -61,6 +60,17 @@ const getPrayerLabel = (key?: string | null) => {
   return match ? match.label : key;
 };
 
+const formatClockTimeArabic = (timeStr?: string | null) => {
+  if (!timeStr) return '';
+  const parts = timeStr.split(':');
+  if (parts.length < 2) return timeStr;
+  let hour = parseInt(parts[0], 10);
+  const minute = parts[1];
+  const isPM = hour >= 12;
+  hour = hour % 12 || 12;
+  return `${hour}:${minute} ${isPM ? 'م' : 'ص'}`;
+};
+
 export const TimeWindowsManager: React.FC = () => {
   const [windows, setWindows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,6 +78,9 @@ export const TimeWindowsManager: React.FC = () => {
   const [newMsgCat, setNewMsgCat] = useState<{ [winId: string]: string }>({});
   const [showAddWindow, setShowAddWindow] = useState(false);
   const [triggerStatus, setTriggerStatus] = useState<string | null>(null);
+
+  // Expanded message bank accordion for routine cards
+  const [expandedBankWinId, setExpandedBankWinId] = useState<string | null>(null);
 
   // Form state
   const [winForm, setWinForm] = useState({
@@ -136,7 +149,6 @@ export const TimeWindowsManager: React.FC = () => {
   const handleToggleComplete = async (winId: string, currentStatus: string) => {
     const newStatus = currentStatus === 'completed' ? 'pending' : 'completed';
     try {
-      // Optimistic update
       setWindows(prev =>
         prev.map(w => (w.id === winId ? { ...w, todayStatus: newStatus } : w))
       );
@@ -182,14 +194,15 @@ export const TimeWindowsManager: React.FC = () => {
 
   const handleStartEdit = (win: any) => {
     setEditingWinId(win.id);
+    const isFixedClock = !win.end_prayer || win.end_prayer === 'fixed_clock' || win.end_prayer === 'fixed_night';
     setEditForm({
       name: win.name,
       routine_type: win.routine_type || 'trackable',
       timing_type: win.timing_type || 'prayer_relative',
       start_prayer: win.start_prayer || 'fajr',
       start_offset_mins: win.start_offset_mins ?? 30,
-      end_prayer: win.end_prayer || 'dhuhr',
-      end_offset_mins: win.end_offset_mins ?? -30,
+      end_prayer: isFixedClock ? 'fixed_clock' : win.end_prayer,
+      end_offset_mins: win.end_offset_mins ?? 0,
       end_fixed_time: win.end_fixed_time || '23:00',
       start_time: win.start_time || '09:00',
       end_time: win.end_time || '17:00',
@@ -204,16 +217,22 @@ export const TimeWindowsManager: React.FC = () => {
 
   const handleSaveEdit = async (winId: string) => {
     try {
+      const payload = {
+        ...editForm,
+        end_prayer: editForm.end_prayer === 'fixed_clock' ? null : editForm.end_prayer
+      };
       const res = await fetch(`/api/windows/${winId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editForm)
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         setEditingWinId(null);
         setTriggerStatus('تم حفظ التعديلات بنجاح! ✨');
         setTimeout(() => setTriggerStatus(null), 4000);
         fetchWindows();
+      } else {
+        alert('فشل حفظ التعديلات');
       }
     } catch (e: any) {
       alert(e?.message);
@@ -236,6 +255,8 @@ export const TimeWindowsManager: React.FC = () => {
 
       if (res.ok) {
         setNewMsgText(prev => ({ ...prev, [winId]: '' }));
+        setTriggerStatus('تمت إضافة الرسالة بنجاح إلى بنك الورد! ✨');
+        setTimeout(() => setTriggerStatus(null), 3500);
         fetchWindows();
       }
     } catch (e) {
@@ -244,7 +265,7 @@ export const TimeWindowsManager: React.FC = () => {
   };
 
   const handleDeleteMessage = async (winId: string, msgId: string) => {
-    if (!confirm('هل تريد حذف هذه الرسالة؟')) return;
+    if (!confirm('هل تريد حذف هذه الرسالة من البنك؟')) return;
     try {
       await fetch(`/api/windows/${winId}/messages?messageId=${msgId}`, {
         method: 'DELETE'
@@ -321,7 +342,7 @@ export const TimeWindowsManager: React.FC = () => {
         timing_type: 'prayer_relative',
         start_prayer: 'fajr',
         start_offset_mins: 30,
-        end_prayer: 'isha',
+        end_prayer: 'fixed_clock',
         end_offset_mins: 0,
         end_fixed_time: '23:00',
         start_time: '06:00',
@@ -351,10 +372,14 @@ export const TimeWindowsManager: React.FC = () => {
   const handleCreateWindow = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const payload = {
+        ...winForm,
+        end_prayer: winForm.end_prayer === 'fixed_clock' ? null : winForm.end_prayer
+      };
       const res = await fetch('/api/windows', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(winForm)
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         setShowAddWindow(false);
@@ -449,7 +474,7 @@ export const TimeWindowsManager: React.FC = () => {
             </div>
             <div className="min-w-0">
               <div className="text-xs font-bold text-slate-100 truncate">ورد القرآن الكريم</div>
-              <div className="text-[10px] text-emerald-400/80 truncate">طوال اليوم حتى 11 م</div>
+              <div className="text-[10px] text-emerald-400/80 truncate">طوال اليوم حتى ساعة مخصصة</div>
             </div>
           </button>
 
@@ -603,24 +628,25 @@ export const TimeWindowsManager: React.FC = () => {
                 {/* End */}
                 <div>
                   <label className="text-[11px] text-slate-400 block mb-1">وقت النهاية:</label>
-                  <div className="flex gap-2">
+                  <div className="space-y-2">
                     <select
                       value={winForm.end_prayer}
                       onChange={e => setWinForm({ ...winForm, end_prayer: e.target.value })}
-                      className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:border-teal-500 outline-none"
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:border-teal-500 outline-none"
                     >
                       {PRAYERS_LIST.map(p => (
                         <option key={p.key} value={p.key}>
                           صلاة {p.label}
                         </option>
                       ))}
-                      <option value="fixed_night">ساعة محددة ليلاً (11:00 م)</option>
+                      <option value="fixed_clock">ساعة محددة باليوم (اختر الساعة)</option>
                     </select>
-                    {winForm.end_prayer !== 'fixed_night' ? (
+
+                    {winForm.end_prayer !== 'fixed_clock' ? (
                       <select
                         value={winForm.end_offset_mins}
                         onChange={e => setWinForm({ ...winForm, end_offset_mins: Number(e.target.value) })}
-                        className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-teal-300 text-xs focus:border-teal-500 outline-none"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-teal-300 text-xs focus:border-teal-500 outline-none"
                       >
                         <option value={0}>عند الأذان تماماً</option>
                         <option value={-15}>قبلها بـ 15 دقيقة</option>
@@ -628,12 +654,17 @@ export const TimeWindowsManager: React.FC = () => {
                         <option value={30}>بعدها بـ 30 دقيقة</option>
                       </select>
                     ) : (
-                      <input
-                        type="time"
-                        value={winForm.end_fixed_time}
-                        onChange={e => setWinForm({ ...winForm, end_fixed_time: e.target.value })}
-                        className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs outline-none"
-                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="time"
+                          value={winForm.end_fixed_time}
+                          onChange={e => setWinForm({ ...winForm, end_fixed_time: e.target.value })}
+                          className="flex-1 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-teal-300 font-bold text-xs outline-none"
+                        />
+                        <span className="text-xs text-slate-300 font-semibold whitespace-nowrap">
+                          {formatClockTimeArabic(winForm.end_fixed_time)}
+                        </span>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -741,20 +772,29 @@ export const TimeWindowsManager: React.FC = () => {
               const isCompleted = routine.todayStatus === 'completed';
               const isActive = !!routine.is_active;
               const isEditing = editingWinId === routine.id;
+              const isBankExpanded = expandedBankWinId === routine.id;
               const messages = routine.messages || [];
 
-              // Timing subtitle
+              // Clean Timing Description without 'fixed_night'
               let timingText = '';
               if (routine.timing_type === 'prayer_relative' && routine.start_prayer) {
                 const sOffset = Number(routine.start_offset_mins || 0);
                 const sOffsetStr = sOffset === 0 ? '' : sOffset > 0 ? ` +${sOffset}د` : ` ${sOffset}د`;
-                const eOffset = Number(routine.end_offset_mins || 0);
-                const eOffsetStr = eOffset === 0 ? '' : eOffset > 0 ? ` +${eOffset}د` : ` ${eOffset}د`;
-                timingText = `بعد ${getPrayerLabel(routine.start_prayer)}${sOffsetStr} حتى ${
-                  routine.end_prayer ? getPrayerLabel(routine.end_prayer) + eOffsetStr : routine.end_fixed_time || 'العشاء'
-                }`;
+
+                let endDesc = '';
+                if (routine.end_prayer && routine.end_prayer !== 'fixed_clock' && routine.end_prayer !== 'fixed_night') {
+                  const eOffset = Number(routine.end_offset_mins || 0);
+                  const eOffsetStr = eOffset === 0 ? '' : eOffset > 0 ? ` +${eOffset}د` : ` ${eOffset}د`;
+                  endDesc = `حتى صلاة ${getPrayerLabel(routine.end_prayer)}${eOffsetStr}`;
+                } else if (routine.end_fixed_time) {
+                  endDesc = `حتى الساعة ${formatClockTimeArabic(routine.end_fixed_time)}`;
+                } else {
+                  endDesc = 'حتى العشاء';
+                }
+
+                timingText = `بعد ${getPrayerLabel(routine.start_prayer)}${sOffsetStr} ${endDesc}`;
               } else {
-                timingText = `${routine.start_time} - ${routine.end_time}`;
+                timingText = `من ${formatClockTimeArabic(routine.start_time)} إلى ${formatClockTimeArabic(routine.end_time)}`;
               }
 
               return (
@@ -790,7 +830,7 @@ export const TimeWindowsManager: React.FC = () => {
                               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                             )}
                           </h4>
-                          <span className="text-xs text-emerald-400/90 font-medium font-mono">
+                          <span className="text-xs text-emerald-400 font-semibold">
                             {timingText}
                           </span>
                         </div>
@@ -806,7 +846,7 @@ export const TimeWindowsManager: React.FC = () => {
                         </button>
                         <button
                           onClick={() => (isEditing ? handleCancelEdit() : handleStartEdit(routine))}
-                          title="تعديل الروتين"
+                          title="تعديل الروتين والتوقيت"
                           className="p-1.5 rounded-lg text-slate-400 hover:text-teal-300 hover:bg-teal-500/10 transition"
                         >
                           <Edit3 className="w-4 h-4" />
@@ -821,8 +861,8 @@ export const TimeWindowsManager: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Sub-bar: Interval & Messages count */}
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 my-2 pt-2 border-t border-slate-800/60">
+                    {/* Sub-bar: Interval & Message Bank Toggle */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 my-2 pt-2 border-t border-slate-800/60">
                       <div className="flex items-center gap-1.5 bg-slate-950/80 border border-slate-800 px-2 py-0.5 rounded-lg">
                         <Repeat className="w-3 h-3 text-emerald-400" />
                         <span className="text-[11px] text-slate-300">التكرار:</span>
@@ -838,31 +878,52 @@ export const TimeWindowsManager: React.FC = () => {
                           ))}
                         </select>
                       </div>
-                      <span className="text-slate-500">•</span>
-                      <span className="text-[11px] text-slate-400">{messages.length} رسالة في البنك</span>
+
+                      {/* Interactive Button to Open/Close Message Bank */}
+                      <button
+                        onClick={() => setExpandedBankWinId(isBankExpanded ? null : routine.id)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold transition ${
+                          isBankExpanded
+                            ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                            : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
+                        }`}
+                        title="إضافة وعرض رسائل هذا الورد"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>بنك الرسائل ({messages.length})</span>
+                        {isBankExpanded ? (
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+                        )}
+                      </button>
                     </div>
                   </div>
 
-                  {/* Inline Edit Form */}
+                  {/* Complete Inline Edit Form */}
                   {isEditing && (
-                    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
-                      <div className="text-xs font-bold text-teal-300">تعديل الروتين:</div>
-                      <div className="grid grid-cols-2 gap-2">
+                    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-3 animate-fadeIn">
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                        <span className="text-xs font-bold text-teal-300">تعديل تفاصيل وأوقات الورد:</span>
+                        <button onClick={handleCancelEdit} className="text-xs text-slate-400 hover:text-white">إلغاء</button>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                         <div>
-                          <label className="text-[10px] text-slate-400 block mb-0.5">الاسم</label>
+                          <label className="text-[10px] text-slate-400 block mb-0.5">اسم الروتين</label>
                           <input
                             type="text"
                             value={editForm.name}
                             onChange={e => setEditForm({ ...editForm, name: e.target.value })}
-                            className="w-full px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs outline-none"
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs outline-none focus:border-teal-500"
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] text-slate-400 block mb-0.5">التكرار</label>
+                          <label className="text-[10px] text-slate-400 block mb-0.5">تكرار الإشعار</label>
                           <select
                             value={editForm.interval_mins}
                             onChange={e => setEditForm({ ...editForm, interval_mins: Number(e.target.value) })}
-                            className="w-full px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-emerald-300 text-xs outline-none font-semibold"
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-emerald-300 text-xs outline-none font-semibold"
                           >
                             {INTERVAL_OPTIONS.map(opt => (
                               <option key={opt.value} value={opt.value}>
@@ -872,18 +933,178 @@ export const TimeWindowsManager: React.FC = () => {
                           </select>
                         </div>
                       </div>
+
+                      {/* Timing options in edit */}
+                      {editForm.timing_type === 'prayer_relative' ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 border-t border-slate-800/80">
+                          <div>
+                            <label className="text-[10px] text-slate-400 block mb-0.5">البداية:</label>
+                            <div className="flex gap-1.5">
+                              <select
+                                value={editForm.start_prayer}
+                                onChange={e => setEditForm({ ...editForm, start_prayer: e.target.value })}
+                                className="flex-1 px-2 py-1 rounded bg-slate-900 border border-slate-700 text-white text-xs"
+                              >
+                                {PRAYERS_LIST.map(p => (
+                                  <option key={p.key} value={p.key}>صلاة {p.label}</option>
+                                ))}
+                              </select>
+                              <select
+                                value={editForm.start_offset_mins}
+                                onChange={e => setEditForm({ ...editForm, start_offset_mins: Number(e.target.value) })}
+                                className="px-2 py-1 rounded bg-slate-900 border border-slate-700 text-teal-300 text-xs"
+                              >
+                                <option value={0}>عند الأذان</option>
+                                <option value={15}>+15 د</option>
+                                <option value={30}>+30 د</option>
+                                <option value={45}>+45 د</option>
+                                <option value={60}>+60 د</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] text-slate-400 block mb-0.5">النهاية (صلاة أو ساعة محددة):</label>
+                            <div className="space-y-1">
+                              <select
+                                value={editForm.end_prayer}
+                                onChange={e => setEditForm({ ...editForm, end_prayer: e.target.value })}
+                                className="w-full px-2 py-1 rounded bg-slate-900 border border-slate-700 text-white text-xs"
+                              >
+                                {PRAYERS_LIST.map(p => (
+                                  <option key={p.key} value={p.key}>صلاة {p.label}</option>
+                                ))}
+                                <option value="fixed_clock">ساعة محددة باليوم (اختر الوقت)</option>
+                              </select>
+
+                              {editForm.end_prayer !== 'fixed_clock' ? (
+                                <select
+                                  value={editForm.end_offset_mins}
+                                  onChange={e => setEditForm({ ...editForm, end_offset_mins: Number(e.target.value) })}
+                                  className="w-full px-2 py-1 rounded bg-slate-900 border border-slate-700 text-teal-300 text-xs"
+                                >
+                                  <option value={0}>عند الأذان تماماً</option>
+                                  <option value={-15}>قبلها بـ 15 دقيقة</option>
+                                  <option value={-30}>قبلها بـ 30 دقيقة</option>
+                                  <option value={30}>بعدها بـ 30 دقيقة</option>
+                                </select>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="time"
+                                    value={editForm.end_fixed_time || '23:00'}
+                                    onChange={e => setEditForm({ ...editForm, end_fixed_time: e.target.value })}
+                                    className="flex-1 px-2 py-1 rounded bg-slate-900 border border-slate-700 text-teal-300 font-bold text-xs"
+                                  />
+                                  <span className="text-[11px] text-slate-300 font-semibold">
+                                    {formatClockTimeArabic(editForm.end_fixed_time)}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/80">
+                          <div>
+                            <label className="text-[10px] text-slate-400 block mb-0.5">البداية</label>
+                            <input
+                              type="time"
+                              value={editForm.start_time}
+                              onChange={e => setEditForm({ ...editForm, start_time: e.target.value })}
+                              className="w-full px-2 py-1 rounded bg-slate-900 border border-slate-700 text-white text-xs"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-slate-400 block mb-0.5">النهاية</label>
+                            <input
+                              type="time"
+                              value={editForm.end_time}
+                              onChange={e => setEditForm({ ...editForm, end_time: e.target.value })}
+                              className="w-full px-2 py-1 rounded bg-slate-900 border border-slate-700 text-white text-xs"
+                            />
+                          </div>
+                        </div>
+                      )}
+
                       <div className="flex justify-end gap-1.5 pt-1">
                         <button
                           onClick={handleCancelEdit}
-                          className="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 text-xs"
+                          className="px-3 py-1 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold"
                         >
                           إلغاء
                         </button>
                         <button
                           onClick={() => handleSaveEdit(routine.id)}
-                          className="px-3 py-1 rounded-lg bg-teal-500 text-slate-950 font-bold text-xs"
+                          className="px-4 py-1 rounded-lg bg-teal-500 text-slate-950 font-bold text-xs hover:bg-teal-400 transition"
                         >
-                          حفظ
+                          حفظ التعديل
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* =================================================== */}
+                  {/* MESSAGE BANK SECTION FOR THIS ROUTINE               */}
+                  {/* =================================================== */}
+                  {isBankExpanded && (
+                    <div className="p-3.5 sm:p-4 rounded-xl bg-slate-950/90 border border-slate-800 space-y-3 animate-fadeIn">
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+                        <div className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                          <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>بنك رسائل {routine.name}:</span>
+                        </div>
+                        <span className="text-[11px] text-slate-500">{messages.length} رسالة مسجلة</span>
+                      </div>
+
+                      {messages.length === 0 ? (
+                        <div className="p-3 rounded-lg bg-slate-900/60 border border-dashed border-slate-800 text-center text-xs text-slate-400 leading-relaxed">
+                          لا توجد رسائل مخصصة بعد. سيصلك التذكير الافتراضي باسم الورد، أو يمكنك إضافة أذكار وآيات محددة أدناه ليختار منها النظام عشوائياً في كل إشعار.
+                        </div>
+                      ) : (
+                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                          {messages.map((m: any) => (
+                            <div
+                              key={m.id}
+                              className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-slate-900 border border-slate-800/80 hover:border-slate-700 group transition"
+                            >
+                              <div className="text-xs text-slate-200 leading-relaxed font-medium">
+                                • {m.message_text}
+                              </div>
+                              <button
+                                onClick={() => handleDeleteMessage(routine.id, m.id)}
+                                title="حذف الرسالة"
+                                className="text-slate-600 hover:text-rose-400 p-1 transition shrink-0"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Add message input */}
+                      <div className="flex gap-2 pt-2 border-t border-slate-800/60">
+                        <input
+                          type="text"
+                          placeholder="اكتب ذكراً أو دعاءً أو توجيهاً لهذا الورد..."
+                          value={newMsgText[routine.id] || ''}
+                          onChange={e => setNewMsgText({ ...newMsgText, [routine.id]: e.target.value })}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddMessage(routine.id);
+                            }
+                          }}
+                          className="flex-1 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs placeholder-slate-500 focus:border-emerald-500 outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleAddMessage(routine.id)}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition shrink-0 flex items-center gap-1"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>إضافة</span>
                         </button>
                       </div>
                     </div>

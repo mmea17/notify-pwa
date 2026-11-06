@@ -90,6 +90,8 @@ export const POST: APIRoute = async (context) => {
 
     const id = 'win-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
 
+    const sanitizedEndPrayer = (end_prayer === 'fixed_clock' || end_prayer === 'fixed_night') ? null : (end_prayer || null);
+
     await db.prepare(`
       INSERT INTO time_windows (
         id, user_id, name, icon,
@@ -108,7 +110,7 @@ export const POST: APIRoute = async (context) => {
       timing_type || 'prayer_relative',
       start_prayer || null,
       Number(start_offset_mins) || 0,
-      end_prayer || null,
+      sanitizedEndPrayer,
       Number(end_offset_mins) || 0,
       end_fixed_time || null,
       start_time || '09:00',
