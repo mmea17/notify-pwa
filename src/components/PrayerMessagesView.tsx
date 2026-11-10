@@ -11,9 +11,6 @@ import {
   Sparkles,
   CheckCircle2,
   AlertCircle,
-  Calendar,
-  Edit3,
-  X,
   MessageSquare
 } from 'lucide-react';
 
@@ -23,16 +20,6 @@ interface PrayerMessage {
   timing: 'pre' | 'azan' | 'post';
   message_text: string;
   created_at?: string;
-}
-
-interface QadaaRecord {
-  id: string;
-  date: string;
-  prayer: string;
-  prayerNameAr: string;
-  scheduled_time: string;
-  responded_at?: string;
-  delay_reason?: string;
 }
 
 const PRAYERS_CONFIG = [
@@ -64,88 +51,6 @@ export const PrayerMessagesView: React.FC = () => {
   // Selected prayer tab for viewing in Card 2
   const [activePrayerTab, setActivePrayerTab] = useState<string>('fajr');
 
-  // Qadaa Journal State
-  const [qadaaList, setQadaaList] = useState<QadaaRecord[]>([]);
-  const [qadaaLoading, setQadaaLoading] = useState(true);
-  const [qadaaFilter, setQadaaFilter] = useState<string>('all');
-  const [editingQadaaId, setEditingQadaaId] = useState<string | null>(null);
-  const [editingReasonText, setEditingReasonText] = useState('');
-  const [deletingQadaaId, setDeletingQadaaId] = useState<string | null>(null);
-
-  const fetchQadaaList = async () => {
-    try {
-      const res = await fetch('/api/prayers/qadaa');
-      if (res.ok) {
-        const data = await res.json();
-        const list = data.qadaaList || [];
-        setQadaaList(list);
-        try {
-          localStorage.setItem('cached_qadaa_list', JSON.stringify(list));
-        } catch (e) {}
-      } else {
-        const cached = localStorage.getItem('cached_qadaa_list');
-        if (cached) setQadaaList(JSON.parse(cached));
-      }
-    } catch (e) {
-      const cached = localStorage.getItem('cached_qadaa_list');
-      if (cached) setQadaaList(JSON.parse(cached));
-    } finally {
-      setQadaaLoading(false);
-    }
-  };
-
-  const handleUpdateQadaaReason = async (id: string) => {
-    try {
-      const res = await fetch('/api/prayers/qadaa', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, delay_reason: editingReasonText })
-      });
-      if (res.ok) {
-        setQadaaList(prev =>
-          prev.map(item => (item.id === id ? { ...item, delay_reason: editingReasonText } : item))
-        );
-        setEditingQadaaId(null);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleDeleteQadaa = async (id: string) => {
-    if (!confirm('هل تريد حذف هذه الصلاة من سجل القضاء وإعادتها كصلاة غير مؤكدة؟')) return;
-    setDeletingQadaaId(id);
-    try {
-      const res = await fetch(`/api/prayers/qadaa?id=${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        setQadaaList(prev => prev.filter(item => item.id !== id));
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setDeletingQadaaId(null);
-    }
-  };
-
-  const filteredQadaa = qadaaList.filter(item => {
-    if (qadaaFilter === 'all') return true;
-    return item.prayer === qadaaFilter;
-  });
-
-  const formatTimeArabic = (isoString?: string | null) => {
-    if (!isoString) return '';
-    try {
-      const d = new Date(isoString);
-      let hour = d.getHours();
-      const minute = String(d.getMinutes()).padStart(2, '0');
-      const isPM = hour >= 12;
-      hour = hour % 12 || 12;
-      return `${hour}:${minute} ${isPM ? 'م' : 'ص'}`;
-    } catch {
-      return isoString;
-    }
-  };
-
   const fetchMessages = async () => {
     try {
       const res = await fetch('/api/prayers/messages');
@@ -171,7 +76,6 @@ export const PrayerMessagesView: React.FC = () => {
 
   useEffect(() => {
     fetchMessages();
-    fetchQadaaList();
   }, []);
 
   const handleTogglePrayer = (key: string) => {
@@ -583,197 +487,6 @@ export const PrayerMessagesView: React.FC = () => {
             )}
           </div>
         </div>
-      </div>
-
-      {/* ======================================================== */}
-      {/* CARD 3: سجل أسباب تأخير الصلوات وقضائها (المحاسبة الذاتية) */}
-      {/* ======================================================== */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-6 backdrop-blur-sm shadow-xl space-y-4">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-base">
-              📝
-            </div>
-            <div>
-              <h3 className="text-base sm:text-lg font-extrabold text-white flex items-center gap-2">
-                <span>سجل أسباب تأخير الصلوات وقضائها</span>
-                <span className="text-amber-400">🟡</span>
-              </h3>
-              <p className="text-xs text-slate-400">
-                مراجعة أسباب تأخير الفروض وقضائها لمحاسبة النفس وتفادي مسببات التأخير
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs px-3 py-1 rounded-full bg-amber-500/10 text-amber-300 font-bold border border-amber-500/20">
-              {qadaaList.length} {qadaaList.length === 1 ? 'صلاة مقضية مسجلة' : 'صلوات مقضية مسجلة'}
-            </span>
-          </div>
-        </div>
-
-        {/* Filter Tabs by Prayer */}
-        <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-950/60 rounded-xl border border-slate-800/80">
-          <button
-            type="button"
-            onClick={() => setQadaaFilter('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-              qadaaFilter === 'all'
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            الكل ({qadaaList.length})
-          </button>
-          {PRAYERS_CONFIG.map(p => {
-            const count = qadaaList.filter(q => q.prayer === p.key).length;
-            return (
-              <button
-                key={p.key}
-                type="button"
-                onClick={() => setQadaaFilter(p.key)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                  qadaaFilter === p.key
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                {p.label} ({count})
-              </button>
-            );
-          })}
-        </div>
-
-        {/* List of Qadaa Cards */}
-        {qadaaLoading ? (
-          <div className="p-8 text-center text-xs text-slate-400 animate-pulse">
-            جاري تحميل سجل الصلوات المقضية...
-          </div>
-        ) : filteredQadaa.length === 0 ? (
-          <div className="p-6 rounded-xl bg-slate-950/40 border border-dashed border-slate-800 text-center space-y-1">
-            <p className="text-sm font-bold text-slate-300">
-              {qadaaList.length === 0
-                ? 'ما شاء الله! لا توجد صلوات مسجلة كقضاء 🌟'
-                : 'لا توجد صلوات مقضية مسجلة لهذه الفريضة.'}
-            </p>
-            <p className="text-xs text-slate-500">
-              {qadaaList.length === 0
-                ? 'جميع صلواتك تؤدى في مواعيدها بانتظام. تقبل الله طاعتكم وثبتكم!'
-                : 'يمكنك اختيار تبويب (الكل) لعرض كافة السجلات.'}
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {filteredQadaa.map(item => {
-              const isEditing = editingQadaaId === item.id;
-              return (
-                <div
-                  key={item.id}
-                  className="p-3.5 sm:p-4 rounded-xl bg-slate-950/80 border border-slate-800/80 hover:border-amber-500/30 transition flex flex-col justify-between gap-2.5 group"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-sm shadow-amber-400/50 shrink-0" />
-                      <div>
-                        <h4 className="text-xs sm:text-sm font-extrabold text-white flex items-center gap-2">
-                          <span>صلاة {item.prayerNameAr}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-bold">
-                            قضاء
-                          </span>
-                        </h4>
-                        <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3 text-slate-500" />
-                            <span>{item.date}</span>
-                          </span>
-                          {item.responded_at && (
-                            <>
-                              <span>•</span>
-                              <span className="flex items-center gap-1">
-                                <Clock className="w-3 h-3 text-slate-500" />
-                                <span>سُجلت: {formatTimeArabic(item.responded_at)}</span>
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (isEditing) {
-                            setEditingQadaaId(null);
-                          } else {
-                            setEditingQadaaId(item.id);
-                            setEditingReasonText(item.delay_reason || '');
-                          }
-                        }}
-                        title={isEditing ? 'إلغاء التعديل' : 'تعديل سبب التأخير'}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-amber-300 hover:bg-amber-500/10 transition"
-                      >
-                        {isEditing ? <X className="w-3.5 h-3.5" /> : <Edit3 className="w-3.5 h-3.5" />}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteQadaa(item.id)}
-                        disabled={deletingQadaaId === item.id}
-                        title="حذف من سجل القضاء"
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition"
-                      >
-                        {deletingQadaaId === item.id ? (
-                          <span className="text-[10px] animate-spin">⏳</span>
-                        ) : (
-                          <Trash2 className="w-3.5 h-3.5" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Delay Reason Text / Edit Input */}
-                  {isEditing ? (
-                    <div className="space-y-2 pt-2 border-t border-slate-800 animate-fadeIn">
-                      <textarea
-                        rows={2}
-                        value={editingReasonText}
-                        onChange={e => setEditingReasonText(e.target.value)}
-                        placeholder="عدل سبب التأخير..."
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs outline-none focus:border-amber-400 resize-none"
-                      />
-                      <div className="flex justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setEditingQadaaId(null)}
-                          className="px-2.5 py-1 rounded bg-slate-800 text-slate-400 text-xs font-semibold"
-                        >
-                          إلغاء
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateQadaaReason(item.id)}
-                          className="px-3 py-1 rounded bg-amber-500 text-slate-950 text-xs font-bold hover:bg-amber-400 transition"
-                        >
-                          حفظ التعديل
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800/80 text-xs text-amber-200/90 leading-relaxed font-medium">
-                      <span className="text-amber-400 font-bold ml-1">سبب التأخير:</span>
-                      <span>
-                        {item.delay_reason && item.delay_reason.trim()
-                          ? `"${item.delay_reason}"`
-                          : 'لم يُسجل سبب محدد.'}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
     </div>
   );
