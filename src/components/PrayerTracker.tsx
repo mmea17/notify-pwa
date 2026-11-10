@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Clock,
   CheckCircle2,
+  AlertCircle,
   Moon,
   Sun,
   Sunrise,
@@ -12,6 +13,7 @@ import {
 } from 'lucide-react';
 import { calculateDailyPrayers } from '@/lib/prayer';
 import { getCountryTimezone } from '@/lib/countries';
+import { PrayerActionModal } from './PrayerActionModal';
 
 interface PrayerTrackerProps {
   initialPrayers?: any;
@@ -26,6 +28,13 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
     initialPrayers?.selectedDateStr || initialPrayers?.todayStr || ''
   );
   const [hasOfflineQueue, setHasOfflineQueue] = useState(false);
+  const [modalPrayer, setModalPrayer] = useState<{
+    key: string;
+    label: string;
+    timeFormatted: string;
+    status: 'prayed' | 'qadaa' | 'pending' | 'missed';
+    delayReason?: string | null;
+  } | null>(null);
 
   const getCachedSettings = () => {
     try {
@@ -60,11 +69,11 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
   };
 
   // Queue offline prayer toggle to localStorage
-  const queueOfflinePrayerAction = (prayer: string, status: string, date: string) => {
+  const queueOfflinePrayerAction = (prayer: string, status: string, date: string, delayReason?: string) => {
     try {
       const queue = JSON.parse(localStorage.getItem('offline_prayer_actions') || '[]');
       const filtered = queue.filter((item: any) => !(item.prayer === prayer && item.date === date));
-      filtered.push({ prayer, status, date, timestamp: Date.now() });
+      filtered.push({ prayer, status, date, delayReason: delayReason || null, timestamp: Date.now() });
       localStorage.setItem('offline_prayer_actions', JSON.stringify(filtered));
       setHasOfflineQueue(true);
     } catch (e) {}
@@ -85,7 +94,8 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
           body: JSON.stringify({
             prayer: item.prayer,
             status: item.status,
-            date: item.date
+            date: item.date,
+            delay_reason: item.delayReason
           })
         });
       }
@@ -180,6 +190,7 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
         for (const a of dateActions) {
           if (calculated[a.prayer as 'fajr']) {
             calculated[a.prayer as 'fajr'].status = a.status;
+            calculated[a.prayer as 'fajr'].delayReason = a.delayReason || null;
           }
         }
       } catch (e) {}
@@ -264,9 +275,21 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
     }
   };
 
-  // Toggle clicked prayer for the currently viewed date
-  const handleTogglePrayer = async (prayerKey: string, currentStatus: string) => {
-    const newStatus = currentStatus === 'prayed' ? 'pending' : 'prayed';
+  // Open modal for selected prayer
+  const handleOpenModal = (prayerKey: string, item: any) => {
+    setModalPrayer({
+      key: prayerKey,
+      label: item.label,
+      timeFormatted: item.info?.timeFormatted || '',
+      status: item.info?.status || 'pending',
+      delayReason: item.info?.delayReason || null
+    });
+  };
+
+  // Save prayer status (prayed, qadaa, pending)
+  const handleSavePrayerStatus = async (newStatus: 'prayed' | 'qadaa' | 'pending', delayReason?: string) => {
+    if (!modalPrayer) return;
+    const prayerKey = modalPrayer.key;
     const targetDate = data?.selectedDateStr || selectedDate || data?.todayStr;
 
     // 1. Optimistic update
@@ -278,7 +301,8 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
           ...prev.prayers,
           [prayerKey]: {
             ...prev.prayers[prayerKey],
-            status: newStatus
+            status: newStatus,
+            delayReason: delayReason || null
           }
         }
       };
@@ -292,7 +316,8 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
           ...data?.prayers,
           [prayerKey]: {
             ...data?.prayers?.[prayerKey],
-            status: newStatus
+            status: newStatus,
+            delayReason: delayReason || null
           }
         }
       };
@@ -300,11 +325,12 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
       localStorage.setItem('last_active_prayers', JSON.stringify(updated));
     } catch (e) {}
 
+    setModalPrayer(null);
     setActionLoading(prayerKey);
 
     // If device is offline, queue action locally and skip network
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      queueOfflinePrayerAction(prayerKey, newStatus, targetDate);
+      queueOfflinePrayerAction(prayerKey, newStatus, targetDate, delayReason);
       setActionLoading(null);
       return;
     }
@@ -316,15 +342,16 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
         body: JSON.stringify({
           prayer: prayerKey,
           status: newStatus,
-          date: targetDate
+          date: targetDate,
+          delay_reason: delayReason
         })
       });
       if (!res.ok) {
-        queueOfflinePrayerAction(prayerKey, newStatus, targetDate);
+        queueOfflinePrayerAction(prayerKey, newStatus, targetDate, delayReason);
       }
     } catch (e) {
       console.warn('Network error toggling prayer, queued for sync:', e);
-      queueOfflinePrayerAction(prayerKey, newStatus, targetDate);
+      queueOfflinePrayerAction(prayerKey, newStatus, targetDate, delayReason);
     } finally {
       setActionLoading(null);
     }
@@ -460,7 +487,9 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
         {prayerItems.map((item) => {
           const Icon = item.icon;
           const isSunrise = item.isSunrise;
-          const isPrayed = item.info?.status === 'prayed';
+          const status = item.info?.status;
+          const isPrayed = status === 'prayed';
+          const isQadaa = status === 'qadaa';
           const isNext = isNextTomorrow
             ? (isTomorrowView && next?.key === item.key)
             : (isToday && next?.key === item.key);
@@ -471,6 +500,8 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
               className={`w-full rounded-xl sm:rounded-2xl px-3 sm:px-4 py-2.5 sm:py-3 border transition-all grid grid-cols-[1.25fr_75px_0.75fr] items-center ${
                 isPrayed
                   ? 'bg-emerald-950/20 border-emerald-500/40 shadow-sm'
+                  : isQadaa
+                  ? 'bg-amber-950/20 border-amber-500/40 shadow-sm shadow-amber-500/5'
                   : isNext
                   ? 'bg-gradient-to-r from-emerald-950/60 to-slate-900 border-emerald-400 shadow-md shadow-emerald-500/10 ring-1 ring-emerald-400/40'
                   : 'bg-slate-900/70 border-slate-800/80 hover:border-slate-700/80'
@@ -482,6 +513,8 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
                   className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 ${
                     isPrayed
                       ? 'bg-emerald-500/20 text-emerald-300'
+                      : isQadaa
+                      ? 'bg-amber-500/20 text-amber-300'
                       : isNext
                       ? 'bg-emerald-500 text-slate-950 font-bold'
                       : 'bg-slate-800/90 text-slate-300'
@@ -490,9 +523,16 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
                   <Icon className="w-4 h-4" />
                 </div>
 
-                <span className={`text-sm sm:text-base font-bold whitespace-nowrap ${isNext ? 'text-emerald-300 font-extrabold' : 'text-slate-100'}`}>
-                  {item.label}
-                </span>
+                <div className="min-w-0">
+                  <span className={`text-sm sm:text-base font-bold whitespace-nowrap ${isNext ? 'text-emerald-300 font-extrabold' : 'text-slate-100'}`}>
+                    {item.label}
+                  </span>
+                  {isQadaa && item.info?.delayReason && (
+                    <div className="text-[10px] text-amber-400/90 truncate max-w-[140px] sm:max-w-xs font-medium">
+                      {item.info.delayReason}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Middle: Prayer Time (Shifted slightly to the left, 100% symmetric vertical alignment) */}
@@ -502,7 +542,7 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
                 </span>
               </div>
 
-              {/* Left: Action Button / Status (Compact "صليت" / "إلغاء") */}
+              {/* Left: Action Button / Status (Compact "صليت" / "في وقتها ✅" / "قضيتها 🟡") */}
               <div className="flex items-center justify-end">
                 {isSunrise ? (
                   <span className="text-sm text-slate-500 font-bold px-3 py-1.5">
@@ -510,11 +550,13 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
                   </span>
                 ) : (
                   <button
-                    onClick={() => handleTogglePrayer(item.key, item.info?.status)}
+                    onClick={() => handleOpenModal(item.key, item)}
                     disabled={actionLoading === item.key}
                     className={`px-2.5 sm:px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1 active:scale-95 whitespace-nowrap min-w-[56px] ${
                       isPrayed
-                        ? 'bg-emerald-500/20 text-emerald-300 hover:bg-rose-500/20 hover:text-rose-300 hover:border-rose-500/40 border border-emerald-500/40 shadow-sm'
+                        ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/40 shadow-sm'
+                        : isQadaa
+                        ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/40 shadow-sm shadow-amber-500/10'
                         : 'bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-200 border border-slate-700/80 shadow-sm'
                     }`}
                   >
@@ -523,7 +565,12 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
                     ) : isPrayed ? (
                       <>
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        <span>إلغاء</span>
+                        <span>في وقتها</span>
+                      </>
+                    ) : isQadaa ? (
+                      <>
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span>قضيتها</span>
                       </>
                     ) : (
                       <span>صليت</span>
@@ -535,6 +582,20 @@ export const PrayerTracker: React.FC<PrayerTrackerProps> = ({ initialPrayers }) 
           );
         })}
       </div>
+
+      {/* Prayer Action Modal (On-time vs Qadaa with reason) */}
+      {modalPrayer && (
+        <PrayerActionModal
+          isOpen={!!modalPrayer}
+          onClose={() => setModalPrayer(null)}
+          prayerName={modalPrayer.label}
+          prayerTime={modalPrayer.timeFormatted}
+          currentStatus={modalPrayer.status}
+          currentDelayReason={modalPrayer.delayReason}
+          onSave={handleSavePrayerStatus}
+          loading={!!actionLoading}
+        />
+      )}
     </div>
   );
 };

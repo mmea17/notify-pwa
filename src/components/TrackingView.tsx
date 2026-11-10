@@ -13,8 +13,10 @@ import {
   Sunrise,
   Sunset,
   Sparkles,
-  RotateCcw
+  RotateCcw,
+  AlertCircle
 } from 'lucide-react';
+import { PrayerActionModal } from './PrayerActionModal';
 
 interface TrackingViewProps {
   initialData?: any;
@@ -46,6 +48,13 @@ export const TrackingView: React.FC<TrackingViewProps> = () => {
     } catch (e) {}
     return '';
   });
+  const [modalPrayer, setModalPrayer] = useState<{
+    key: string;
+    label: string;
+    timeFormatted: string;
+    status: 'prayed' | 'qadaa' | 'pending' | 'missed';
+    delayReason?: string | null;
+  } | null>(null);
 
   const fetchHistory = async (year = currentYear, month = currentMonth) => {
     try {
@@ -115,11 +124,24 @@ export const TrackingView: React.FC<TrackingViewProps> = () => {
     setSelectedDateStr(data?.todayStr || '');
   };
 
-  // Toggle prayer status on any selected day
-  const handleTogglePrayer = async (prayerKey: string, currentStatus: string) => {
-    if (!selectedDateStr) return;
-    const newStatus = currentStatus === 'prayed' ? 'pending' : 'prayed';
+  // Open modal for selected prayer in history
+  const handleOpenModal = (prayerKey: string, pInfo: any) => {
+    const meta = PRAYER_META[prayerKey];
+    setModalPrayer({
+      key: prayerKey,
+      label: meta.label,
+      timeFormatted: pInfo?.timeFormatted || '',
+      status: pInfo?.status || 'pending',
+      delayReason: pInfo?.delayReason || null
+    });
+  };
+
+  // Save prayer status from modal (prayed, qadaa, pending)
+  const handleSavePrayerStatus = async (newStatus: 'prayed' | 'qadaa' | 'pending', delayReason?: string) => {
+    if (!selectedDateStr || !modalPrayer) return;
+    const prayerKey = modalPrayer.key;
     setActionLoading(prayerKey);
+    setModalPrayer(null);
 
     // Optimistic update
     let updatedData: any = null;
@@ -132,14 +154,19 @@ export const TrackingView: React.FC<TrackingViewProps> = () => {
           ...d.prayers,
           [prayerKey]: {
             ...currentP,
-            status: newStatus
+            status: newStatus,
+            delayReason: delayReason || null
           }
         };
-        const prayedCount = Object.values(updatedPrayers).filter((p: any) => p.status === 'prayed').length;
+        const performedCount = Object.values(updatedPrayers).filter(
+          (p: any) => p.status === 'prayed' || p.status === 'qadaa'
+        ).length;
+        const hasQadaa = Object.values(updatedPrayers).some((p: any) => p.status === 'qadaa');
         return {
           ...d,
-          prayedCount,
-          isComplete: prayedCount === 5,
+          prayedCount: performedCount,
+          isComplete: performedCount === 5,
+          hasQadaa,
           prayers: updatedPrayers
         };
       });
@@ -162,7 +189,13 @@ export const TrackingView: React.FC<TrackingViewProps> = () => {
     try {
       const queue = JSON.parse(localStorage.getItem('offline_prayer_actions') || '[]');
       const filtered = queue.filter((item: any) => !(item.prayer === prayerKey && item.date === selectedDateStr));
-      filtered.push({ prayer: prayerKey, status: newStatus, date: selectedDateStr, timestamp: Date.now() });
+      filtered.push({
+        prayer: prayerKey,
+        status: newStatus,
+        date: selectedDateStr,
+        delayReason: delayReason || null,
+        timestamp: Date.now()
+      });
       localStorage.setItem('offline_prayer_actions', JSON.stringify(filtered));
     } catch (e) {}
 
@@ -173,6 +206,7 @@ export const TrackingView: React.FC<TrackingViewProps> = () => {
         const parsed = JSON.parse(dayCache);
         if (parsed?.prayers?.[prayerKey]) {
           parsed.prayers[prayerKey].status = newStatus;
+          parsed.prayers[prayerKey].delayReason = delayReason || null;
           localStorage.setItem('cached_prayers_' + selectedDateStr, JSON.stringify(parsed));
         }
       }
@@ -191,14 +225,15 @@ export const TrackingView: React.FC<TrackingViewProps> = () => {
         body: JSON.stringify({
           prayer: prayerKey,
           status: newStatus,
-          date: selectedDateStr
+          date: selectedDateStr,
+          delay_reason: delayReason
         })
       });
       if (res.ok) {
         fetchHistory(currentYear, currentMonth);
       }
     } catch (err) {
-      console.warn('Network error toggling prayer from history, queued for sync:', err);
+      console.warn('Network error updating prayer from history, queued for sync:', err);
     } finally {
       setActionLoading(null);
     }
@@ -405,6 +440,8 @@ export const TrackingView: React.FC<TrackingViewProps> = () => {
                           className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${
                             p.status === 'prayed'
                               ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50'
+                              : p.status === 'qadaa'
+                              ? 'bg-amber-400 shadow-sm shadow-amber-400/50'
                               : p.status === 'missed'
                               ? 'bg-rose-500/80'
                               : 'bg-slate-700'
@@ -417,9 +454,15 @@ export const TrackingView: React.FC<TrackingViewProps> = () => {
                   {/* Summary Fraction */}
                   <div className="text-[10px] font-bold">
                     {day.prayedCount === 5 ? (
-                      <span className="text-emerald-400">5/5 ✅</span>
+                      day.hasQadaa ? (
+                        <span className="text-amber-300">5/5 🟡</span>
+                      ) : (
+                        <span className="text-emerald-400">5/5 ✅</span>
+                      )
                     ) : day.prayedCount > 0 ? (
-                      <span className="text-amber-300">{day.prayedCount}/5</span>
+                      <span className={day.hasQadaa ? 'text-amber-300' : 'text-emerald-400/90'}>
+                        {day.prayedCount}/5 {day.hasQadaa ? '🟡' : ''}
+                      </span>
                     ) : isPast ? (
                       <span className="text-rose-400/80">0/5 ❌</span>
                     ) : (
@@ -434,8 +477,12 @@ export const TrackingView: React.FC<TrackingViewProps> = () => {
           {/* Legend Guide */}
           <div className="mt-6 pt-4 border-t border-slate-800/80 flex flex-wrap items-center justify-center gap-4 text-xs text-slate-400">
             <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-              <span>تمت الصلاة (صح أخضر ✅)</span>
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />
+              <span>صُلّيت في وقتها (صح أخضر ✅)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-sm shadow-amber-400/50" />
+              <span>صُلّيت قضاءً (دائرة صفراء ⚠️)</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
@@ -469,69 +516,94 @@ export const TrackingView: React.FC<TrackingViewProps> = () => {
                 const Icon = meta.icon;
                 const pInfo = selectedDay?.prayers?.[pKey];
                 const isPrayed = pInfo?.status === 'prayed';
+                const isQadaa = pInfo?.status === 'qadaa';
                 const isMissed = pInfo?.status === 'missed';
                 const isLoading = actionLoading === pKey;
 
                 return (
                   <div
                     key={pKey}
-                    className={`p-3 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
+                    className={`p-3 rounded-2xl border transition-all flex flex-col gap-2 ${
                       isPrayed
                         ? 'bg-emerald-950/30 border-emerald-500/40'
+                        : isQadaa
+                        ? 'bg-amber-950/20 border-amber-500/40 shadow-sm shadow-amber-500/5'
                         : isMissed
                         ? 'bg-rose-950/20 border-rose-900/40'
                         : 'bg-slate-950/60 border-slate-800'
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                        isPrayed
-                          ? 'bg-emerald-500/20 text-emerald-300'
-                          : isMissed
-                          ? 'bg-rose-500/20 text-rose-400'
-                          : 'bg-slate-800 text-slate-400'
-                      }`}>
-                        <Icon className="w-4 h-4" />
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                          isPrayed
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : isQadaa
+                            ? 'bg-amber-500/20 text-amber-300'
+                            : isMissed
+                            ? 'bg-rose-500/20 text-rose-400'
+                            : 'bg-slate-800 text-slate-400'
+                        }`}>
+                          <Icon className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-white">{meta.label}</div>
+                          <div className="text-[11px] text-slate-400 font-medium">{pInfo?.timeFormatted}</div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="text-xs font-bold text-white">{meta.label}</div>
-                        <div className="text-[11px] text-slate-400 font-medium">{pInfo?.timeFormatted}</div>
+
+                      {/* Status Badge & Action Button */}
+                      <div className="flex items-center gap-2">
+                        {isPrayed ? (
+                          <button
+                            onClick={() => handleOpenModal(pKey, pInfo)}
+                            disabled={isLoading}
+                            className="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 transition text-xs font-bold flex items-center gap-1 active:scale-95"
+                            title="اضغط للتعديل"
+                          >
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                            <span>في وقتها ✅</span>
+                          </button>
+                        ) : isQadaa ? (
+                          <button
+                            onClick={() => handleOpenModal(pKey, pInfo)}
+                            disabled={isLoading}
+                            className="px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition text-xs font-bold flex items-center gap-1 active:scale-95 shadow-sm shadow-amber-500/10"
+                            title="اضغط للتعديل أو مراجعة السبب"
+                          >
+                            <AlertCircle className="w-4 h-4 text-amber-400" />
+                            <span>قضيتها 🟡</span>
+                          </button>
+                        ) : isMissed ? (
+                          <button
+                            onClick={() => handleOpenModal(pKey, pInfo)}
+                            disabled={isLoading}
+                            className="px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 transition text-xs font-bold flex items-center gap-1 active:scale-95"
+                            title="اضغط لتسجيل قضائها"
+                          >
+                            <XCircle className="w-4 h-4 text-rose-400" />
+                            <span>فاتت ❌</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleOpenModal(pKey, pInfo)}
+                            disabled={isLoading}
+                            className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-emerald-600 text-slate-300 hover:text-white border border-slate-700 transition text-xs font-bold flex items-center gap-1 active:scale-95"
+                          >
+                            <Clock className="w-3.5 h-3.5 text-slate-400" />
+                            <span>صليت</span>
+                          </button>
+                        )}
                       </div>
                     </div>
 
-                    {/* Status Badge & Toggle Button */}
-                    <div className="flex items-center gap-2">
-                      {isPrayed ? (
-                        <button
-                          onClick={() => handleTogglePrayer(pKey, 'prayed')}
-                          disabled={isLoading}
-                          className="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-rose-500/20 text-emerald-300 hover:text-rose-300 border border-emerald-500/30 hover:border-rose-500/30 transition text-xs font-bold flex items-center gap-1 active:scale-95"
-                          title="اضغط للتعديل أو إلغاء التأكيد"
-                        >
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                          <span>صليت ✅</span>
-                        </button>
-                      ) : isMissed ? (
-                        <button
-                          onClick={() => handleTogglePrayer(pKey, 'missed')}
-                          disabled={isLoading}
-                          className="px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-emerald-500/20 text-rose-300 hover:text-emerald-300 border border-rose-500/30 hover:border-emerald-500/30 transition text-xs font-bold flex items-center gap-1 active:scale-95"
-                          title="اضغط لتأكيد قضائها"
-                        >
-                          <XCircle className="w-4 h-4 text-rose-400" />
-                          <span>فاتت ❌</span>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleTogglePrayer(pKey, 'pending')}
-                          disabled={isLoading}
-                          className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-emerald-600 text-slate-300 hover:text-white border border-slate-700 transition text-xs font-bold flex items-center gap-1 active:scale-95"
-                        >
-                          <Clock className="w-3.5 h-3.5 text-slate-400" />
-                          <span>قادمة ⏳</span>
-                        </button>
-                      )}
-                    </div>
+                    {/* Show Delay Reason if Qadaa */}
+                    {isQadaa && pInfo?.delayReason && (
+                      <div className="mt-1 p-2 rounded-xl bg-slate-950/70 border border-amber-500/20 text-[11px] text-amber-200/90 leading-relaxed font-medium">
+                        <span className="text-amber-400 font-bold ml-1">سبب التأخير:</span>
+                        <span>"{pInfo.delayReason}"</span>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -540,10 +612,24 @@ export const TrackingView: React.FC<TrackingViewProps> = () => {
 
           {/* Quick Motivational Tip */}
           <div className="mt-5 p-3 rounded-2xl bg-slate-950/60 border border-slate-800/80 text-[11px] text-slate-400 text-center">
-            💡 يمكنك النقر على أي فريضة في أي يوم لتأكيدها أو تعديلها، وتُحسب السلاسل فورياً.
+            💡 يمكنك النقر على أي فريضة في أي يوم لتسجيل أدائها (في وقتها أو قضاءً) وتدوين الأسباب فورياً.
           </div>
         </div>
       </div>
+
+      {/* Prayer Action Modal (On-time vs Qadaa with reason) */}
+      {modalPrayer && (
+        <PrayerActionModal
+          isOpen={!!modalPrayer}
+          onClose={() => setModalPrayer(null)}
+          prayerName={modalPrayer.label}
+          prayerTime={modalPrayer.timeFormatted}
+          currentStatus={modalPrayer.status}
+          currentDelayReason={modalPrayer.delayReason}
+          onSave={handleSavePrayerStatus}
+          loading={!!actionLoading}
+        />
+      )}
     </div>
   );
 };

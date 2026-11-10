@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS prayers_log (
   snooze_count INTEGER DEFAULT 0,
   next_reminder_at TEXT,
   responded_at TEXT,
+  delay_reason TEXT,
   UNIQUE(user_id, date, prayer)
 );
 

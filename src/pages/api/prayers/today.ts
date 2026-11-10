@@ -62,7 +62,7 @@ export const GET: APIRoute = async (context) => {
 
     // Retrieve selected date's status from D1 for this user
     const logs = await db.prepare(
-      'SELECT prayer, status, responded_at, next_reminder_at FROM prayers_log WHERE user_id = ? AND date = ?'
+      'SELECT prayer, status, responded_at, next_reminder_at, delay_reason FROM prayers_log WHERE user_id = ? AND date = ?'
     ).bind(session.user.id, targetDateStr).all();
 
     const logMap = new Map();
@@ -77,8 +77,10 @@ export const GET: APIRoute = async (context) => {
       const logged = logMap.get(key);
       if (logged) {
         prayers[key].status = logged.status as any;
+        prayers[key].delayReason = logged.delay_reason || null;
       } else {
         prayers[key].status = 'pending';
+        prayers[key].delayReason = null;
       }
     }
 
@@ -114,7 +116,7 @@ export const POST: APIRoute = async (context) => {
     }
 
     const body = await context.request.json();
-    const { prayer, status, date: bodyDate } = body; // status: 'prayed' | 'pending'
+    const { prayer, status, date: bodyDate, delay_reason } = body; // status: 'prayed' | 'qadaa' | 'pending'
 
     if (!prayer) {
       return new Response(JSON.stringify({ error: 'حدد الصلاة' }), { status: 400 });
@@ -124,18 +126,26 @@ export const POST: APIRoute = async (context) => {
     const todayStr = getLocalDateString(new Date(), userTimezone);
     const targetDateStr = (bodyDate && /^\d{4}-\d{2}-\d{2}$/.test(bodyDate)) ? bodyDate : todayStr;
     const logId = `prayer-${session.user.id}-${targetDateStr}-${prayer}`;
+    const finalReason = status === 'qadaa' ? (delay_reason?.trim() || null) : null;
 
     // Only update this specific prayer on the selected date
     await db.prepare(`
-      INSERT INTO prayers_log (id, user_id, date, prayer, status, scheduled_time, responded_at, next_reminder_at)
-      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL)
+      INSERT INTO prayers_log (id, user_id, date, prayer, status, scheduled_time, responded_at, next_reminder_at, delay_reason)
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, ?)
       ON CONFLICT(user_id, date, prayer) DO UPDATE SET
         status = excluded.status,
         responded_at = CURRENT_TIMESTAMP,
-        next_reminder_at = NULL
-    `).bind(logId, session.user.id, targetDateStr, prayer, status || 'prayed').run();
+        next_reminder_at = NULL,
+        delay_reason = excluded.delay_reason
+    `).bind(logId, session.user.id, targetDateStr, prayer, status || 'prayed', finalReason).run();
 
-    return new Response(JSON.stringify({ success: true, date: targetDateStr, prayer, status: status || 'prayed' }), {
+    return new Response(JSON.stringify({
+      success: true,
+      date: targetDateStr,
+      prayer,
+      status: status || 'prayed',
+      delayReason: finalReason
+    }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });

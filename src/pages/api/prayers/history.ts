@@ -43,7 +43,7 @@ export const GET: APIRoute = async (context) => {
 
     // 1. Fetch user's prayer logs for this month
     const monthLogsResult = await db.prepare(`
-      SELECT date, prayer, status, scheduled_time, responded_at
+      SELECT date, prayer, status, scheduled_time, responded_at, delay_reason
       FROM prayers_log
       WHERE user_id = ? AND date >= ? AND date <= ?
     `).bind(userId, monthStartStr, monthEndStr).all();
@@ -109,9 +109,12 @@ export const GET: APIRoute = async (context) => {
           passedCount++;
         }
 
-        let computedStatus: 'prayed' | 'missed' | 'pending' = 'pending';
+        let computedStatus: 'prayed' | 'qadaa' | 'missed' | 'pending' = 'pending';
         if (log && log.status === 'prayed') {
           computedStatus = 'prayed';
+          prayedCount++;
+        } else if (log && log.status === 'qadaa') {
+          computedStatus = 'qadaa';
           prayedCount++;
         } else if (hasPassed) {
           computedStatus = 'missed';
@@ -125,9 +128,12 @@ export const GET: APIRoute = async (context) => {
           time: pInfo.time,
           timeFormatted: pInfo.timeFormatted,
           status: computedStatus,
+          delayReason: log?.delay_reason || null,
           respondedAt: log?.responded_at || null
         };
       }
+
+      const hasQadaa = Object.values(prayersInfo).some((p: any) => p.status === 'qadaa');
 
       days.push({
         date: dateStr,
@@ -142,6 +148,7 @@ export const GET: APIRoute = async (context) => {
         totalPrayers: 5,
         isComplete: prayedCount === 5,
         hasMissed: passedCount > prayedCount,
+        hasQadaa,
         prayers: prayersInfo
       });
     }
@@ -191,10 +198,10 @@ export const GET: APIRoute = async (context) => {
         const pInfo = pastPrayers[pKey];
         const hasPassed = pastDateStr < todayStr || (pastDateStr === todayStr && pInfo.timestamp <= nowTime);
 
-        // Global streak check
+        // Global streak check (both on-time 'prayed' and 'qadaa' keep the streak alive!)
         if (hasPassed && !globalStreakBroken) {
           const status = allLogMap.get(`${pastDateStr}-${pKey}`);
-          if (status === 'prayed') {
+          if (status === 'prayed' || status === 'qadaa') {
             currentGlobalStreak++;
           } else {
             globalStreakBroken = true;
@@ -204,7 +211,7 @@ export const GET: APIRoute = async (context) => {
         // Per-prayer streak check
         if (hasPassed && !prayerStreakBroken[pKey]) {
           const status = allLogMap.get(`${pastDateStr}-${pKey}`);
-          if (status === 'prayed') {
+          if (status === 'prayed' || status === 'qadaa') {
             prayerStreaks[pKey]++;
           } else {
             prayerStreakBroken[pKey] = true;
