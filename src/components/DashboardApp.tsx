@@ -135,15 +135,15 @@ export const DashboardApp: React.FC<DashboardAppProps> = ({ user, settings: init
           </div>
         )}
 
-        {activeTab === 'athkar' && (
-          <div className="animate-fade-in">
-            <AthkarView key={`athkar-${refreshKey}`} refreshKey={refreshKey} />
-          </div>
-        )}
-
         {activeTab === 'reminders' && (
           <div className="animate-fade-in">
             <PrayerMessagesView key={`reminders-${refreshKey}`} />
+          </div>
+        )}
+
+        {activeTab === 'athkar' && (
+          <div className="animate-fade-in">
+            <AthkarView key={`athkar-${refreshKey}`} refreshKey={refreshKey} />
           </div>
         )}
       </main>

@@ -243,7 +243,7 @@ export const TrackingView: React.FC<TrackingViewProps> = () => {
     return (
       <div className="p-12 text-center bg-slate-900/60 border border-slate-800 rounded-3xl animate-pulse text-slate-400">
         <Clock className="w-8 h-8 animate-spin text-emerald-400 mx-auto mb-3" />
-        جاري تحميل سجل المتابعة والتقويم الشهري...
+        جاري تحميل سجل الالتزام والتقويم الشهري...
       </div>
     );
   }

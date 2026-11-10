@@ -6,7 +6,7 @@ import {
   Send,
   Smartphone,
   CheckCircle,
-  Home,
+  Clock,
   Flame,
   Sparkles,
   MessageSquareQuote
@@ -72,10 +72,10 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const NAV_ITEMS: Array<{ id: ActiveTab; label: string; icon: any; badge?: string }> = [
-    { id: 'home', label: 'الرئيسية', icon: Home },
-    { id: 'tracking', label: 'المتابعة', icon: Flame },
-    { id: 'athkar', label: 'الأذكار', icon: Sparkles },
-    { id: 'reminders', label: 'التذكيرات', icon: MessageSquareQuote }
+    { id: 'home', label: 'الفروض', icon: Clock },
+    { id: 'tracking', label: 'الالتزام', icon: Flame },
+    { id: 'reminders', label: 'الرسائل', icon: MessageSquareQuote },
+    { id: 'athkar', label: 'الروتين', icon: Sparkles }
   ];
 
   return (
