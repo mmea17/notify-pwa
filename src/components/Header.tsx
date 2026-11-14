@@ -187,8 +187,8 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Level 1: Main Navigation Tabs (3 Main Pages) */}
-      <div className="border-t border-slate-800/60 bg-slate-950/70">
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center justify-center gap-2 sm:gap-6 py-1.5 sm:py-2">
+      <div className="border-t border-slate-800/80 bg-slate-950">
+        <div className="max-w-6xl mx-auto px-2 sm:px-6 flex items-center justify-center gap-1 sm:gap-8">
           {MAIN_NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = activeMainTab === item.id;
@@ -196,41 +196,52 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 key={item.id}
                 onClick={() => onMainTabChange(item.id)}
-                className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 sm:px-8 py-2 rounded-2xl text-xs sm:text-sm font-black transition-all active:scale-95 ${
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 py-3 px-3 sm:px-8 text-xs sm:text-sm font-black transition-all relative select-none ${
                   isActive
-                    ? 'bg-gradient-to-r from-emerald-500/25 to-teal-500/25 text-emerald-300 border border-emerald-500/50 shadow-md shadow-emerald-500/10 ring-1 ring-emerald-500/30'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
+                    ? 'text-white'
+                    : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
-                <span>{item.label}</span>
+                <Icon
+                  className={`w-4 h-4 transition-transform ${
+                    isActive ? 'text-emerald-400 scale-110' : 'text-slate-400'
+                  }`}
+                />
+                <span className="tracking-wide">{item.label}</span>
+
+                {/* Active Underline Glowing Indicator */}
+                {isActive && (
+                  <span className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.8)] rounded-t-full" />
+                )}
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Level 2: Sub-Header Tabs (Sub-pages for active main page) */}
-      <div className="border-t border-slate-800/40 bg-slate-900/40 backdrop-blur-sm">
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center justify-center gap-1.5 sm:gap-3 py-1.5 overflow-x-auto no-scrollbar">
-          {currentSubItems.map((subItem) => {
-            const SubIcon = subItem.icon;
-            const isSubActive = activeSubTab === subItem.id;
-            return (
-              <button
-                key={subItem.id}
-                onClick={() => onSubTabChange(subItem.id)}
-                className={`flex items-center gap-1.5 px-3.5 sm:px-5 py-1 rounded-xl text-xs font-bold transition-all whitespace-nowrap active:scale-95 ${
-                  isSubActive
-                    ? 'bg-slate-800 text-teal-300 border border-teal-500/40 shadow-sm shadow-teal-500/10'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
-                }`}
-              >
-                <SubIcon className={`w-3.5 h-3.5 ${isSubActive ? 'text-teal-400' : 'text-slate-500'}`} />
-                <span>{subItem.label}</span>
-              </button>
-            );
-          })}
+      {/* Level 2: Sub-Header Tabs (Inset Segmented Control Capsule) */}
+      <div className="border-t border-slate-800/60 bg-slate-900/60 backdrop-blur-md py-2 px-3">
+        <div className="max-w-6xl mx-auto flex items-center justify-center">
+          <div className="inline-flex items-center p-1 rounded-2xl bg-slate-950/90 border border-slate-800/90 shadow-inner max-w-full overflow-x-auto no-scrollbar gap-1">
+            {currentSubItems.map((subItem) => {
+              const SubIcon = subItem.icon;
+              const isSubActive = activeSubTab === subItem.id;
+              return (
+                <button
+                  key={subItem.id}
+                  onClick={() => onSubTabChange(subItem.id)}
+                  className={`flex items-center gap-1.5 px-3.5 sm:px-6 py-1.5 rounded-xl text-xs font-black transition-all whitespace-nowrap select-none active:scale-95 ${
+                    isSubActive
+                      ? 'bg-gradient-to-r from-emerald-400 to-teal-400 text-slate-950 shadow-md shadow-emerald-500/25 ring-1 ring-emerald-300/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                >
+                  <SubIcon className={`w-3.5 h-3.5 ${isSubActive ? 'text-slate-950 stroke-[2.5]' : 'text-slate-400'}`} />
+                  <span>{subItem.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
