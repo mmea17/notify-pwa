@@ -76,7 +76,13 @@ const formatClockTimeArabic = (timeStr?: string | null) => {
   return `${hour}:${minute} ${isPM ? 'م' : 'ص'}`;
 };
 
-export const TimeWindowsManager: React.FC = () => {
+interface TimeWindowsManagerProps {
+  activeSection?: 'all' | 'athkar' | 'habits' | 'continuous';
+}
+
+export const TimeWindowsManager: React.FC<TimeWindowsManagerProps> = ({
+  activeSection = 'all'
+}) => {
   const [windows, setWindows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [newMsgText, setNewMsgText] = useState<{ [winId: string]: string }>({});
@@ -881,9 +887,10 @@ export const TimeWindowsManager: React.FC = () => {
           </div>
           <button
             onClick={() => {
+              const defaultType = activeSection === 'habits' ? 'habit' : activeSection === 'continuous' ? 'continuous' : 'athkar';
               setWinForm({
                 name: '',
-                routine_type: 'athkar',
+                routine_type: defaultType,
                 timing_type: 'prayer_relative',
                 start_prayer: 'fajr',
                 start_offset_mins: 30,
@@ -893,7 +900,7 @@ export const TimeWindowsManager: React.FC = () => {
                 start_time: '09:00',
                 end_time: '17:00',
                 interval_mins: 30,
-                icon: 'Clock'
+                icon: defaultType === 'habit' ? 'Target' : defaultType === 'continuous' ? 'Clock' : 'Sunrise'
               });
               setShowAddWindow(true);
             }}
@@ -905,83 +912,93 @@ export const TimeWindowsManager: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-          <button
-            onClick={() => handleApplyPreset('morning')}
-            className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/70 border border-amber-500/30 hover:border-amber-400/60 text-right transition active:scale-95 group"
-          >
-            <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
-              <Sunrise className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-slate-100 truncate">أذكار الصباح</div>
-              <div className="text-[10px] text-amber-400/80 truncate">بعد الفجر للظهر</div>
-            </div>
-          </button>
+          {(activeSection === 'all' || activeSection === 'athkar') && (
+            <>
+              <button
+                onClick={() => handleApplyPreset('morning')}
+                className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/70 border border-amber-500/30 hover:border-amber-400/60 text-right transition active:scale-95 group"
+              >
+                <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
+                  <Sunrise className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-slate-100 truncate">أذكار الصباح</div>
+                  <div className="text-[10px] text-amber-400/80 truncate">بعد الفجر للظهر</div>
+                </div>
+              </button>
 
-          <button
-            onClick={() => handleApplyPreset('evening')}
-            className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/70 border border-orange-500/30 hover:border-orange-400/60 text-right transition active:scale-95 group"
-          >
-            <div className="w-8 h-8 rounded-lg bg-orange-500/20 text-orange-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
-              <Sunset className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-slate-100 truncate">أذكار المساء</div>
-              <div className="text-[10px] text-orange-400/80 truncate">بعد العصر للمغرب</div>
-            </div>
-          </button>
+              <button
+                onClick={() => handleApplyPreset('evening')}
+                className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/70 border border-orange-500/30 hover:border-orange-400/60 text-right transition active:scale-95 group"
+              >
+                <div className="w-8 h-8 rounded-lg bg-orange-500/20 text-orange-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
+                  <Sunset className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-slate-100 truncate">أذكار المساء</div>
+                  <div className="text-[10px] text-orange-400/80 truncate">بعد العصر للمغرب</div>
+                </div>
+              </button>
 
-          <button
-            onClick={() => handleApplyPreset('quran')}
-            className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/70 border border-emerald-500/30 hover:border-emerald-400/60 text-right transition active:scale-95 group"
-          >
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
-              <BookOpen className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-slate-100 truncate">ورد القرآن</div>
-              <div className="text-[10px] text-emerald-400/80 truncate">طوال اليوم</div>
-            </div>
-          </button>
+              <button
+                onClick={() => handleApplyPreset('quran')}
+                className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/70 border border-emerald-500/30 hover:border-emerald-400/60 text-right transition active:scale-95 group"
+              >
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
+                  <BookOpen className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-slate-100 truncate">ورد القرآن</div>
+                  <div className="text-[10px] text-emerald-400/80 truncate">طوال اليوم</div>
+                </div>
+              </button>
+            </>
+          )}
 
-          <button
-            onClick={() => handleApplyPreset('english')}
-            className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/70 border border-cyan-500/30 hover:border-cyan-400/60 text-right transition active:scale-95 group"
-          >
-            <div className="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
-              <Languages className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-slate-100 truncate">الإنجليزية</div>
-              <div className="text-[10px] text-cyan-400/80 truncate">مساءً بمتابعة</div>
-            </div>
-          </button>
+          {(activeSection === 'all' || activeSection === 'habits') && (
+            <>
+              <button
+                onClick={() => handleApplyPreset('english')}
+                className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/70 border border-cyan-500/30 hover:border-cyan-400/60 text-right transition active:scale-95 group"
+              >
+                <div className="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
+                  <Languages className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-slate-100 truncate">الإنجليزية</div>
+                  <div className="text-[10px] text-cyan-400/80 truncate">مساءً بمتابعة</div>
+                </div>
+              </button>
 
-          <button
-            onClick={() => handleApplyPreset('workout')}
-            className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/70 border border-rose-500/30 hover:border-rose-400/60 text-right transition active:scale-95 group"
-          >
-            <div className="w-8 h-8 rounded-lg bg-rose-500/20 text-rose-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
-              <Activity className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-slate-100 truncate">الرياضة اليومية</div>
-              <div className="text-[10px] text-rose-400/80 truncate">عصراً بمتابعة</div>
-            </div>
-          </button>
+              <button
+                onClick={() => handleApplyPreset('workout')}
+                className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/70 border border-rose-500/30 hover:border-rose-400/60 text-right transition active:scale-95 group"
+              >
+                <div className="w-8 h-8 rounded-lg bg-rose-500/20 text-rose-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
+                  <Activity className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-slate-100 truncate">الرياضة اليومية</div>
+                  <div className="text-[10px] text-rose-400/80 truncate">عصراً بمتابعة</div>
+                </div>
+              </button>
+            </>
+          )}
 
-          <button
-            onClick={() => handleApplyPreset('work')}
-            className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/70 border border-teal-500/30 hover:border-teal-400/60 text-right transition active:scale-95 group"
-          >
-            <div className="w-8 h-8 rounded-lg bg-teal-500/20 text-teal-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
-              <Briefcase className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-slate-100 truncate">فترة العمل</div>
-              <div className="text-[10px] text-teal-400/80 truncate">تذكير مستمر</div>
-            </div>
-          </button>
+          {(activeSection === 'all' || activeSection === 'continuous') && (
+            <button
+              onClick={() => handleApplyPreset('work')}
+              className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/70 border border-teal-500/30 hover:border-teal-400/60 text-right transition active:scale-95 group"
+            >
+              <div className="w-8 h-8 rounded-lg bg-teal-500/20 text-teal-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
+                <Briefcase className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-slate-100 truncate">فترة العمل</div>
+                <div className="text-[10px] text-teal-400/80 truncate">تذكير مستمر</div>
+              </div>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1269,8 +1286,9 @@ export const TimeWindowsManager: React.FC = () => {
       {/* ======================================================== */}
       {/* SECTION 1: أوراد وعبادات اليوم (Athkar & Worship)         */}
       {/* ======================================================== */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+      {(activeSection === 'all' || activeSection === 'athkar') && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold">
               📿
@@ -1301,13 +1319,15 @@ export const TimeWindowsManager: React.FC = () => {
             {athkarRoutines.map(routine => renderRoutineCard(routine, false))}
           </div>
         )}
-      </div>
+        </div>
+      )}
 
       {/* ======================================================== */}
       {/* SECTION 2: العادات والمهام اليومية (Habits Tracker)      */}
       {/* ======================================================== */}
-      <div className="space-y-4 pt-6 border-t border-slate-800/80">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+      {(activeSection === 'all' || activeSection === 'habits') && (
+        <div className="space-y-4 pt-6 border-t border-slate-800/80">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-400 font-bold">
               🎯
@@ -1338,13 +1358,15 @@ export const TimeWindowsManager: React.FC = () => {
             {habitRoutines.map(habit => renderRoutineCard(habit, true))}
           </div>
         )}
-      </div>
+        </div>
+      )}
 
       {/* ======================================================== */}
       {/* SECTION 3: فترات التركيز المستمرة (Continuous Focus)      */}
       {/* ======================================================== */}
-      <div className="space-y-4 pt-6 border-t border-slate-800/80">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+      {(activeSection === 'all' || activeSection === 'continuous') && (
+        <div className="space-y-4 pt-6 border-t border-slate-800/80">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-teal-500/20 flex items-center justify-center text-teal-400 font-bold">
               ⏱️
@@ -1529,6 +1551,7 @@ export const TimeWindowsManager: React.FC = () => {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 };
