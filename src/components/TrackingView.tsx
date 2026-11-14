@@ -416,35 +416,7 @@ export const TrackingView: React.FC<TrackingViewProps> = () => {
         </div>
       </div>
 
-      {/* 2. Per-Prayer Streak Badges (سلاسل كل فريضة منفردة) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        {(['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'] as const).map((pKey) => {
-          const meta = PRAYER_META[pKey];
-          const Icon = meta.icon;
-          const streakCount = prayerStreaks?.[pKey] || 0;
-          return (
-            <div
-              key={pKey}
-              className="bg-slate-900/60 border border-slate-800/80 hover:border-slate-700/80 rounded-2xl p-4 transition-all flex items-center gap-3 backdrop-blur-sm"
-            >
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                streakCount > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'
-              }`}>
-                <Icon className="w-5 h-5" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs text-slate-400 font-semibold truncate">{meta.label}</div>
-                <div className="text-sm sm:text-base font-extrabold text-white flex items-center gap-1">
-                  <span>{streakCount} {streakCount === 1 ? 'صلاة' : streakCount <= 10 ? 'صلوات' : 'صلاة'}</span>
-                  {streakCount > 0 && <span className="text-xs">🔥</span>}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* 3. Monthly Calendar & Selected Day Checklist */}
+      {/* 2. Monthly Calendar & Selected Day Checklist */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left/Main Column: Calendar Grid (7 cols) */}
         <div className="lg:col-span-8 bg-slate-900/50 border border-slate-800/80 rounded-3xl p-5 sm:p-6 backdrop-blur-sm">
